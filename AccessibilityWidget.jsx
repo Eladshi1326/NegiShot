@@ -259,6 +259,20 @@ html.a11y-focus-highlight :is(a,button,input,textarea,select,[tabindex]):focus:n
 .a11y-foot { text-align: center; font-size: 11px; color: #9aa0c0; padding: 2px 0 0; }
 .a11y-mask-band { position: fixed; left: 0; right: 0; background: rgba(0,0,0,.6); pointer-events: none; }
 .a11y-jump-highlight { outline: 3px solid #ffd400 !important; outline-offset: 3px !important; box-shadow: 0 0 0 5px rgba(255,212,0,.35) !important; border-radius: 3px !important; scroll-margin-top: 24px; scroll-margin-bottom: 24px; }
+
+/* ===== מובייל ===== */
+@media (max-width: 480px) {
+  #a11y-panel {
+    position: fixed !important;
+    left: 8px !important; right: 8px !important;
+    bottom: 8px !important; top: auto !important;
+    width: auto !important; max-width: none !important;
+    max-height: 85vh !important;
+  }
+  .a11y-ico-btn { width: 40px; height: 40px; }
+  .a11y-grid { gap: 8px; }
+  .a11y-tile { min-height: 60px; }
+}
 `;
 
 // ---------- אייקונים ----------
@@ -409,11 +423,17 @@ export default function AccessibilityWidget({
     } catch (e) { /* */ }
   }, [settings, baseSettings]);
 
-  // הגדלת טקסט – בנפרד, כדי לא לסרוק את ה-DOM בכל שינוי קטן
+  // הגדלת טקסט – בנפרד; משקיף על שינויי DOM (מעבר עמודים/SPA, תוכן דינמי) ומחיל מחדש
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    if (settings.fontSize > 0) applyFontScale(FONT_FACTORS[settings.fontSize]);
-    else clearFontScale();
+    if (settings.fontSize <= 0) { clearFontScale(); return; }
+    const factor = FONT_FACTORS[settings.fontSize];
+    applyFontScale(factor);
+    if (typeof MutationObserver === 'undefined' || !document.body) return;
+    let t;
+    const obs = new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => applyFontScale(factor), 150); });
+    obs.observe(document.body, { childList: true, subtree: true });
+    return () => { clearTimeout(t); obs.disconnect(); };
   }, [settings.fontSize]);
 
   // Alt+Shift+A – החזרת הווידג'ט
@@ -426,12 +446,19 @@ export default function AccessibilityWidget({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // מסכת קריאה
+  // מסכת קריאה (עכבר + מגע)
   useEffect(() => {
     if (typeof window === 'undefined' || hidden || !settings.readingMask) return;
-    const onMove = (e) => setMaskY(e.clientY);
+    const onMove = (e) => {
+      const y = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
+      if (typeof y === 'number') setMaskY(y);
+    };
     window.addEventListener('mousemove', onMove);
-    return () => window.removeEventListener('mousemove', onMove);
+    window.addEventListener('touchmove', onMove, { passive: true });
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('touchmove', onMove);
+    };
   }, [settings.readingMask, hidden]);
 
   useEffect(() => {

@@ -183,13 +183,13 @@ Popups are `.a11y-modal-overlay` absolutely covering the panel (`role="dialog" a
 
 ## 11. Constraints & gotchas
 
-- **Font scaling walks the DOM** (querySelectorAll('*') under body) and sets inline `font-size` on each element — robust across px/rem, but heavier on very large pages (runs only on font-level change). New elements added later are scaled on the next level change, not continuously (no MutationObserver).
+- **Font scaling walks the DOM** (querySelectorAll('*') under body) and sets inline `font-size` on each element — robust across px/rem. While a size level is active, a debounced `MutationObserver` on `document.body` re-applies the scale to newly added nodes, so the size **persists across SPA route changes and dynamically loaded content**. Other features are class-based on `<html>`, so they already apply to new content automatically. All settings persist across full page loads via `localStorage`.
 - `html.style.filter` (grayscale/sepia/invert) also affects the widget; invert inverts the whole page including the widget (consistent "invert colors" behavior).
 - High contrast (dark/light) force-colors with `!important`; CSS background-images get covered. `<img>` content stays visible.
 - TTS needs a Hebrew OS/browser voice.
 - Permanent hide is recoverable via Alt+Shift+A or clearing the `a11yWidgetHidden` cookie.
 - Render a single instance (fixed element ids).
-- **Mobile**: not specifically tuned yet (panel is 340px capped at `100vw-28px`, so it fits, but full mobile polish is pending the user's real-site test).
+- **Mobile**: on screens ≤480px the panel opens as a near-full-width **bottom sheet** (`@media` overrides the inline absolute position with `!important`), header buttons are enlarged, and the reading mask follows `touchmove` as well as `mousemove`.
 - jsdom lacks `innerText`; code uses `innerText||textContent`.
 
 ---
@@ -221,3 +221,5 @@ After **any** change to the component, update **both** guides: this AI guide and
 - Reading mask has a **yellow border**; big cursor shows a **hand** over clickables; page structure lists **H1/H2…** SEO tags.
 - Cleaner icons for readable-font and hide-images.
 - Page structure: clicking a heading scrolls to it (centered) and highlights it with a yellow frame that clears after 15 seconds.
+- Mobile: panel opens as a bottom sheet on small screens; reading mask follows touch.
+- Font size persists across page navigation (SPA) and dynamically loaded content via a MutationObserver; all settings persist via localStorage.

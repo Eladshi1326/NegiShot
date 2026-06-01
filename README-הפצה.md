@@ -14,7 +14,7 @@
 הוסף לאתר **שורה אחת** (לפני `</body>`). אפשר לשנות הכול דרך `data-*`:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Eladshi1326/NegiShot@latest/dist/accessibility-widget.js"
+<script src="https://cdn.jsdelivr.net/gh/Eladshi1326/NegiShot@main/dist/accessibility-widget.js"
         data-a11y-widget
         data-position="bottom-right"
         data-color="#2b50e0"
@@ -74,14 +74,16 @@ import AccessibilityWidget from './AccessibilityWidget';
 ## אירוח ועדכון אוטומטי (GitHub + jsDelivr)
 
 1. צור ריפו **ציבורי** ב‑GitHub והעלה את התיקייה (כולל `dist/accessibility-widget.js`).
-2. ה‑URL להטמעה:
-   - אחרון תמיד: `https://cdn.jsdelivr.net/gh/Eladshi1326/NegiShot@latest/dist/accessibility-widget.js`
-   - גרסה נעולה (יציב): `https://cdn.jsdelivr.net/gh/Eladshi1326/NegiShot@v1.0.0/dist/accessibility-widget.js`
+2. ה‑URL להטמעה (משתמשים ב‑`@main` שעוקב אחרי ה‑branch):
+   - `https://cdn.jsdelivr.net/gh/Eladshi1326/NegiShot@main/dist/accessibility-widget.js`
+   - גרסה נעולה ויציבה (אופציונלי): `https://cdn.jsdelivr.net/gh/Eladshi1326/NegiShot@v1.0.0/dist/accessibility-widget.js`
 3. **עדכון אוטומטי:** דוחפים שינוי לריפו → ה‑CDN מגיש את הקובץ החדש → כל האתרים מקבלים בטעינה הבאה.
 
-> **מטמון (חשוב):** `@latest` נשמר ב‑jsDelivr עד ~7 ימים. כדי לעדכן **מיידית**: או שמשתמשים בתגית גרסה חדשה (מומלץ), או "מנקים" מטמון דרך `https://purge.jsdelivr.net/gh/Eladshi1326/NegiShot@latest/dist/accessibility-widget.js`.
+> **למה `@main` ולא `@latest`?** ב‑jsDelivr, `@latest` מצביע על ה‑**tag/release** האחרון — לא על הקומיט האחרון. כל עוד דוחפים קומיטים בלי ליצור tag, `@latest` לא מתעדכן. `@main` עוקב ישירות אחרי ה‑branch, אז כל דחיפה נספרת.
 >
-> **אזהרה:** עדכון אוטומטי = שינוי שובר ישבור את כל האתרים בבת אחת. עבוד עם גרסאות (semver) ובדוק לפני שאתה דוחף.
+> **מטמון:** `@main` נשמר ב‑jsDelivr עד ~12 שעות. כדי לעדכן **מיידית** — "מנקים" מטמון (purge) דרך `https://purge.jsdelivr.net/gh/Eladshi1326/NegiShot@main/dist/accessibility-widget.js` (הקובץ `רענון-CDN.bat` עושה זאת בלחיצה, וכפתור ההעלאה עושה זאת אוטומטית אחרי הדחיפה).
+>
+> **אזהרה:** עדכון אוטומטי = שינוי שובר ישבור את כל האתרים בבת אחת. עבוד בזהירות ובדוק לפני שאתה דוחף.
 
 ---
 

@@ -43,7 +43,7 @@ Then render with matching props (§3). Confirm the framework (React/Next.js/Vite
 ### Standalone script (any site, incl. non-React) — `embed.jsx` → `dist/accessibility-widget.js`
 For non-React sites, or one-line drop-in + auto-update, use the bundled script (React is bundled inside):
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Eladshi1326/NegiShot@latest/dist/accessibility-widget.js"
+<script src="https://cdn.jsdelivr.net/gh/Eladshi1326/NegiShot@main/dist/accessibility-widget.js"
         data-a11y-widget data-position="bottom-right" data-color="#2b50e0" defer></script>
 ```
 - `embed.jsx` reads config, priority low→high: script tag `data-*` → `window.A11yWidgetConfig` → `AccessibilityWidget.init(options)`. It creates a `#a11y-widget-host` div, renders the component into it, and auto-inits on load unless `data-auto="false"`.
@@ -229,3 +229,5 @@ After **any** change to the component, update **both** guides: this AI guide and
 - Stop animations strengthened to `animation/transition: none` (stops CSS animations); JS-library animations need `prefers-reduced-motion`.
 - Mobile panel now sized with `dvh` (fits the visible screen, no top cutoff) and made more compact.
 - The button is now **draggable** on touch & mouse; its position persists (`a11y-widget-pos`).
+- Drag: fixed needing to tap twice after a drag (the click right after a drag is suppressed; `draggedRef` resets on each new `pointerdown`). On a **mobile↔desktop viewport switch** the button snaps back to its default corner and clears the saved position (resize/orientationchange listener crossing the 480px breakpoint); the loaded position is clamped into the viewport so it's never off-screen.
+- **Embed URL uses `@main`** (tracks the branch), NOT `@latest` — on jsDelivr `@latest` points to the latest **tag/release**, not your commits, so it never updated. `@main` cache ≈ 12h; purge for instant.

@@ -487,7 +487,13 @@ function AccessibilityWidget({
     } catch (e) { /* */ }
     try {
       const sp = window.localStorage.getItem('a11y-widget-pos');
-      if (sp) { const o = JSON.parse(sp); if (o && typeof o.top === 'number' && typeof o.left === 'number') { posRef.current = o; setPos(o); } }
+      if (sp) {
+        const o = JSON.parse(sp);
+        if (o && typeof o.top === 'number' && typeof o.left === 'number') {
+          const np = { top: Math.max(4, Math.min(window.innerHeight - size - 4, o.top)), left: Math.max(4, Math.min(window.innerWidth - size - 4, o.left)) };
+          posRef.current = np; setPos(np);
+        }
+      }
     } catch (e) { /* */ }
   }, [color]);
 
@@ -537,6 +543,34 @@ function AccessibilityWidget({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // החזרה למיקום ברירת המחדל במעבר מובייל<->דסקטופ; ושמירה שהכפתור לא ייעלם מחוץ למסך
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let wasMobile = window.innerWidth <= 480;
+    const onResize = () => {
+      const isMobileNow = window.innerWidth <= 480;
+      if (isMobileNow !== wasMobile) {
+        wasMobile = isMobileNow;
+        posRef.current = null;
+        setPos(null);
+        try { window.localStorage.removeItem('a11y-widget-pos'); } catch (e) { /* */ }
+        return;
+      }
+      if (posRef.current) {
+        const t = Math.max(4, Math.min(window.innerHeight - size - 4, posRef.current.top));
+        const l = Math.max(4, Math.min(window.innerWidth - size - 4, posRef.current.left));
+        if (t !== posRef.current.top || l !== posRef.current.left) {
+          const np = { top: t, left: l };
+          posRef.current = np; setPos(np);
+          try { window.localStorage.setItem('a11y-widget-pos', JSON.stringify(np)); } catch (e) { /* */ }
+        }
+      }
+    };
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    return () => { window.removeEventListener('resize', onResize); window.removeEventListener('orientationchange', onResize); };
+  }, [size]);
+
   // מסכת קריאה (עכבר + מגע)
   useEffect(() => {
     if (typeof window === 'undefined' || hidden || !settings.readingMask) return;
@@ -566,6 +600,7 @@ function AccessibilityWidget({
   // ---------- גרירת הכפתור (עכבר + מגע) ----------
   const onDragPointerDown = useCallback((e) => {
     if (!toggleRef.current) return;
+    draggedRef.current = false;
     const r = toggleRef.current.getBoundingClientRect();
     dragRef.current = { sx: e.clientX, sy: e.clientY, top: r.top, left: r.left, moved: 0, dragging: false };
     try { toggleRef.current.setPointerCapture(e.pointerId); } catch (err) { /* */ }

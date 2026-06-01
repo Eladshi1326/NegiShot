@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>תצוגת סקריפט – כפתור נגישות</title>
+<style>
+  body { font-family: Arial, "Segoe UI", Tahoma, sans-serif; margin: 0; background: #f6f7fb; color: #1f2430; }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 26px 20px 140px; }
+  .banner { background: #16a34a; color: #fff; border-radius: 12px; padding: 16px 18px; margin-bottom: 22px; line-height: 1.6; }
+  code { background: #eef0f8; padding: 2px 6px; border-radius: 6px; direction: ltr; display: inline-block; }
+  h1 { font-size: 30px; } h2 { font-size: 22px; margin-top: 26px; } h3 { font-size: 18px; }
+  p { line-height: 1.6; font-size: 17px; } a { color: #1d4ed8; }
+  .spin { width: 56px; height: 56px; border-radius: 12px; background: linear-gradient(135deg,#2b50e0,#9333ea); animation: spin 2.4s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="banner">
+      <b>תצוגת שיטת הסקריפט (עובד גם בלי אינטרנט).</b><br/>
+      הדף הזה אינו React — הוא טוען קובץ אחד: <code>&lt;script src="./dist/accessibility-widget.js" ...&gt;</code>.
+      הכפתור בפינה. נסה הכול.
+    </div>
+    <h1>כותרת ראשית לדוגמה</h1>
+    <p>פסקה עם <a href="#">קישור ראשון</a> ו<a href="#">קישור שני</a>. הגדל טקסט, נסה ניגודיות, מבנה עמוד ועוד.</p>
+    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='170'%3E%3Crect width='320' height='170' fill='%234f7cff'/%3E%3Ctext x='160' y='95' font-size='22' fill='white' text-anchor='middle' font-family='Arial'%3EIMAGE 1%3C/text%3E%3C/svg%3E" alt="תמונה לדוגמה" width="320" height="170" style="border-radius:10px" />
+    <h2>פרק ראשון</h2>
+    <p>טקסט לבדיקת גובה שורה, מרווחים ויישור.</p>
+    <h3>תת-פרק 1.1</h3>
+    <p>"מבנה עמוד" אמור לרשום את הכותרות האלה (H1/H2/H3) ולקפוץ אליהן.</p>
+    <h2>פרק שני</h2>
+    <p>לחץ "הקראת הדף בקול". הריבוע מסתובב — "השהה אנימציות" יעצור אותו:</p>
+    <div class="spin"></div>
+  </main>
+
+  <!-- כל ההטמעה: שורה אחת. אפשר לשנות מיקום/צבע/גודל/לוגו דרך data-* -->
+  <script src="./dist/accessibility-widget.js"
+          data-a11y-widget
+          data-position="bottom-right"
+          data-color="#16a34a"
+          data-size="60"
+          data-brand-label="האתר שלי"
+          defer></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+node_modules/
+*.log
+*.bat
+.DS_Store
+Thumbs.db

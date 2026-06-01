@@ -131,6 +131,12 @@ const WIDGET_CSS = `
 /* ===== אפקטים גלובליים ===== */
 html.a11y-active { scrollbar-gutter: stable; }
 
+/* גודל טקסט/תוכן – דרך zoom על תוכן הדף (לא נוגע בווידג'ט); אמין ונשמר בין עמודים */
+html.a11y-zoom-1 body > *:not(#a11y-widget-host):not(#a11y-widget-root):not(script):not(style):not([data-a11y-widget-mount]) { zoom: 1.15; }
+html.a11y-zoom-2 body > *:not(#a11y-widget-host):not(#a11y-widget-root):not(script):not(style):not([data-a11y-widget-mount]) { zoom: 1.30; }
+html.a11y-zoom-3 body > *:not(#a11y-widget-host):not(#a11y-widget-root):not(script):not(style):not([data-a11y-widget-mount]) { zoom: 1.45; }
+html.a11y-zoom-4 body > *:not(#a11y-widget-host):not(#a11y-widget-root):not(script):not(style):not([data-a11y-widget-mount]) { zoom: 1.60; }
+
 html.a11y-lh-1 body *${EX} { line-height: 1.6 !important; }
 html.a11y-lh-2 body *${EX} { line-height: 1.9 !important; }
 html.a11y-lh-3 body *${EX} { line-height: 2.3 !important; }
@@ -177,8 +183,9 @@ html.a11y-hide-images :is(img, picture, video, canvas):not(#a11y-widget-root *) 
 html.a11y-stop-animations *${EX},
 html.a11y-stop-animations *${EX}::before,
 html.a11y-stop-animations *${EX}::after {
-  animation-duration: .001s !important; animation-delay: 0s !important; animation-iteration-count: 1 !important;
-  transition-duration: .001s !important; transition-delay: 0s !important; scroll-behavior: auto !important;
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
 }
 
 html.a11y-big-cursor, html.a11y-big-cursor *${EX} { cursor: url("${CUR_ARROW}") 6 4, auto !important; }
@@ -194,7 +201,7 @@ html.a11y-focus-highlight :is(a,button,input,textarea,select,[tabindex]):focus:n
 /* ===== עיצוב הווידג'ט ===== */
 #a11y-widget-root { font-size: 16px; }
 #a11y-widget-root *, #a11y-widget-root *::before, #a11y-widget-root *::after { box-sizing: border-box; font-family: Arial, 'Segoe UI', Tahoma, sans-serif; }
-#a11y-widget-toggle { border: none; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(0,0,0,.32); cursor: pointer; padding: 0; transition: transform .15s ease, box-shadow .15s ease; }
+#a11y-widget-toggle { border: none; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(0,0,0,.32); cursor: pointer; padding: 0; transition: transform .15s ease, box-shadow .15s ease; touch-action: none; user-select: none; -webkit-user-select: none; }
 #a11y-widget-toggle:hover { transform: scale(1.07); }
 #a11y-widget-toggle:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 #a11y-widget-toggle img { display: block; }
@@ -267,11 +274,16 @@ html.a11y-focus-highlight :is(a,button,input,textarea,select,[tabindex]):focus:n
     left: 8px !important; right: 8px !important;
     bottom: 8px !important; top: auto !important;
     width: auto !important; max-width: none !important;
-    max-height: 85vh !important;
+    max-height: 82vh !important;
+    max-height: 82dvh !important; /* גובה תצוגה אמיתי במובייל – לא נחתך למעלה */
   }
+  .a11y-head { padding: 12px 14px; }
+  .a11y-body { padding: 10px; }
+  .a11y-card { padding: 10px 10px 12px; margin-bottom: 10px; }
+  .a11y-card-title { margin: 2px 4px 8px; }
   .a11y-ico-btn { width: 40px; height: 40px; }
   .a11y-grid { gap: 8px; }
-  .a11y-tile { min-height: 60px; }
+  .a11y-tile { min-height: 52px; padding: 9px 10px; }
 }
 `;
 
@@ -364,6 +376,10 @@ export default function AccessibilityWidget({
   const [hidden, setHidden] = useState(false);
   const [headings, setHeadings] = useState([]);
   const [maskY, setMaskY] = useState(-1);
+  const [pos, setPos] = useState(null);   // מיקום נגרר ע"י המשתמש {top,left} או null
+  const posRef = useRef(null);
+  const dragRef = useRef(null);
+  const draggedRef = useRef(false);
 
   const rootRef = useRef(null);
   const panelRef = useRef(null);
@@ -388,6 +404,10 @@ export default function AccessibilityWidget({
       const saved = window.localStorage.getItem(STORAGE_KEY);
       if (saved) setSettings({ ...baseSettings, ...JSON.parse(saved) });
     } catch (e) { /* */ }
+    try {
+      const sp = window.localStorage.getItem('a11y-widget-pos');
+      if (sp) { const o = JSON.parse(sp); if (o && typeof o.top === 'number' && typeof o.left === 'number') { posRef.current = o; setPos(o); } }
+    } catch (e) { /* */ }
   }, [color]);
 
   // החלת הגדרות (חוץ מגודל הטקסט שמטופל בנפרד) + שמירה
@@ -399,6 +419,7 @@ export default function AccessibilityWidget({
     setLevelClass(html, 'a11y-ls', settings.letterSpacing, 3);
     setLevelClass(html, 'a11y-ws', settings.wordSpacing, 3);
     setAlignClass(html, settings.textAlign);
+    setLevelClass(html, 'a11y-zoom', settings.fontSize, 4);
     html.classList.toggle('a11y-readable-font', settings.readableFont);
     html.classList.toggle('a11y-highlight-links', settings.highlightLinks);
     html.classList.toggle('a11y-contrast-dark', settings.contrast === 1);
@@ -423,18 +444,7 @@ export default function AccessibilityWidget({
     } catch (e) { /* */ }
   }, [settings, baseSettings]);
 
-  // הגדלת טקסט – בנפרד; משקיף על שינויי DOM (מעבר עמודים/SPA, תוכן דינמי) ומחיל מחדש
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    if (settings.fontSize <= 0) { clearFontScale(); return; }
-    const factor = FONT_FACTORS[settings.fontSize];
-    applyFontScale(factor);
-    if (typeof MutationObserver === 'undefined' || !document.body) return;
-    let t;
-    const obs = new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => applyFontScale(factor), 150); });
-    obs.observe(document.body, { childList: true, subtree: true });
-    return () => { clearTimeout(t); obs.disconnect(); };
-  }, [settings.fontSize]);
+  // גודל טקסט מטופל דרך class a11y-zoom (CSS zoom) באפקט הראשי — נשמר בין עמודים ולא נדרס ע"י React
 
   // Alt+Shift+A – החזרת הווידג'ט
   useEffect(() => {
@@ -471,6 +481,38 @@ export default function AccessibilityWidget({
   }, [open, view]);
 
   useEffect(() => { if (open && panelRef.current) panelRef.current.focus(); }, [open]);
+
+  // ---------- גרירת הכפתור (עכבר + מגע) ----------
+  const onDragPointerDown = useCallback((e) => {
+    if (!toggleRef.current) return;
+    const r = toggleRef.current.getBoundingClientRect();
+    dragRef.current = { sx: e.clientX, sy: e.clientY, top: r.top, left: r.left, moved: 0, dragging: false };
+    try { toggleRef.current.setPointerCapture(e.pointerId); } catch (err) { /* */ }
+  }, []);
+  const onDragPointerMove = useCallback((e) => {
+    const d = dragRef.current; if (!d) return;
+    const dx = e.clientX - d.sx, dy = e.clientY - d.sy;
+    d.moved = Math.max(d.moved, Math.abs(dx) + Math.abs(dy));
+    if (d.moved > 6) {
+      d.dragging = true;
+      const sz = (toggleRef.current && toggleRef.current.offsetWidth) || 58;
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const np = {
+        top: Math.max(4, Math.min(vh - sz - 4, d.top + dy)),
+        left: Math.max(4, Math.min(vw - sz - 4, d.left + dx)),
+      };
+      posRef.current = np;
+      setPos(np);
+    }
+  }, []);
+  const onDragPointerUp = useCallback((e) => {
+    const d = dragRef.current; dragRef.current = null;
+    try { if (toggleRef.current) toggleRef.current.releasePointerCapture(e.pointerId); } catch (err) { /* */ }
+    if (d && d.dragging) {
+      draggedRef.current = true; // למנוע שהלחיצה תיפתח אחרי גרירה
+      try { window.localStorage.setItem('a11y-widget-pos', JSON.stringify(posRef.current)); } catch (err) { /* */ }
+    }
+  }, []);
 
   const cycle = useCallback((key, max) => { setSettings((s) => ({ ...s, [key]: s[key] >= max ? 0 : s[key] + 1 })); }, []);
   const toggle = useCallback((key) => { setSettings((s) => ({ ...s, [key]: !s[key] })); }, []);
@@ -527,7 +569,7 @@ export default function AccessibilityWidget({
     html.style.filter = ''; html.style.webkitFilter = '';
     ['a11y-readable-font', 'a11y-highlight-links', 'a11y-contrast-dark', 'a11y-contrast-light', 'a11y-hide-images', 'a11y-stop-animations', 'a11y-big-cursor', 'a11y-focus-highlight',
      'a11y-lh-1', 'a11y-lh-2', 'a11y-lh-3', 'a11y-ls-1', 'a11y-ls-2', 'a11y-ls-3', 'a11y-ws-1', 'a11y-ws-2', 'a11y-ws-3',
-     'a11y-align-right', 'a11y-align-center', 'a11y-align-left', 'a11y-align-justify'].forEach((c) => html.classList.remove(c));
+     'a11y-align-right', 'a11y-align-center', 'a11y-align-left', 'a11y-align-justify', 'a11y-zoom-1', 'a11y-zoom-2', 'a11y-zoom-3', 'a11y-zoom-4'].forEach((c) => html.classList.remove(c));
     clearFontScale();
     if (jumpRef.current.timer) clearTimeout(jumpRef.current.timer);
     if (jumpRef.current.el) jumpRef.current.el.classList.remove('a11y-jump-highlight');
@@ -536,16 +578,26 @@ export default function AccessibilityWidget({
 
   if (hidden) return null;
 
-  const isBottom = position.indexOf('bottom') === 0;
-  const isRight = position.indexOf('right') >= 0;
   const radius = shape === 'rounded' ? Math.round(size * 0.28) + 'px' : '50%';
 
-  const containerStyle = {
-    position: 'fixed',
-    [isBottom ? 'bottom' : 'top']: offset + 'px',
-    [isRight ? 'right' : 'left']: offset + 'px',
-    width: size + 'px', height: size + 'px', zIndex,
-  };
+  // מיקום: ברירת מחדל לפי prop, או מיקום שנגרר ע"י המשתמש (pos)
+  let isBottom = position.indexOf('bottom') === 0;
+  let isRight = position.indexOf('right') >= 0;
+  let containerStyle;
+  if (pos) {
+    containerStyle = { position: 'fixed', top: pos.top + 'px', left: pos.left + 'px', width: size + 'px', height: size + 'px', zIndex };
+    if (typeof window !== 'undefined') {
+      isBottom = (pos.top + size / 2) > (window.innerHeight / 2);
+      isRight = (pos.left + size / 2) > (window.innerWidth / 2);
+    }
+  } else {
+    containerStyle = {
+      position: 'fixed',
+      [isBottom ? 'bottom' : 'top']: offset + 'px',
+      [isRight ? 'right' : 'left']: offset + 'px',
+      width: size + 'px', height: size + 'px', zIndex,
+    };
+  }
   const toggleStyle = { width: size + 'px', height: size + 'px', borderRadius: radius, background: color, color: iconColor };
   const panelStyle = {
     position: 'absolute',
@@ -595,7 +647,9 @@ export default function AccessibilityWidget({
       <button id="a11y-widget-toggle" ref={toggleRef} type="button" style={toggleStyle}
         aria-label={open ? 'סגירת תפריט נגישות' : buttonLabel}
         aria-expanded={open} aria-haspopup="dialog" aria-controls="a11y-panel"
-        onClick={() => { setOpen((o) => !o); setView('main'); }}>
+        onPointerDown={onDragPointerDown} onPointerMove={onDragPointerMove}
+        onPointerUp={onDragPointerUp} onPointerCancel={onDragPointerUp}
+        onClick={() => { if (draggedRef.current) { draggedRef.current = false; return; } setOpen((o) => !o); setView('main'); }}>
         {toggleIcon}
       </button>
 

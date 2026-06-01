@@ -115,7 +115,7 @@ const DEFAULTS = {
 
 **Main effect** `useEffect([settings, baseSettings])`: adds `a11y-active` (scrollbar-gutter); sets level classes `a11y-lh/ls/ws-{n}` and `a11y-align-{dir}`; toggles boolean classes; sets `html.style.filter` from grayscale (`grayscale(100%)`/`sepia(100%)`) + contrast invert (`invert(1) hue-rotate(180deg)`); toggles `a11y-contrast-dark`/`a11y-contrast-light`; lazy-loads dyslexia font; persists.
 
-**Font effect** `useEffect([settings.fontSize])`: calls `applyFontScale(FONT_FACTORS[level])` or `clearFontScale()`. `applyFontScale` walks `document.body` elements (excluding the widget), stores each element's original computed font-size in `data-a11y-fs`, and sets `font-size = original*factor !important` inline — so **all text scales, including px-based sites**. `clearFontScale` removes the inline sizes and attributes. (Kept separate so other toggles don't trigger a DOM walk.)
+**Font size (zoom):** handled in the main effect via `setLevelClass(html,'a11y-zoom',fontSize,4)`. CSS rules `html.a11y-zoom-{n} body > *:not(#a11y-widget-host):not(#a11y-widget-root)…{ zoom: 1.15/1.30/1.45/1.60 }` scale the page content. Because it is a **class on `<html>`** (not inline styles on elements), it is **React-proof and persists across page navigation / re-renders**, and applies to dynamically added content automatically. `zoom` scales px/rem/em alike. The widget is excluded, so it keeps its own size. (The old per-element `applyFontScale`/`clearFontScale` helpers remain in the file but are no longer the scaling mechanism.)
 
 **Scoping:** global rules exclude the widget via `EX = ':not(#a11y-widget-root):not(#a11y-widget-root *)'`. (Filters on `<html>` — grayscale/sepia/invert — also affect the widget, which is acceptable/consistent.)
 
@@ -128,7 +128,7 @@ const DEFAULTS = {
 **Leveled (bars indicator, cyclic, wrap to 0)** — handler `cycle(key,max)`:
 | key | label | max | mechanism |
 |---|---|---|---|
-| `fontSize` | גודל טקסט | 4 | DOM-walk inline `font-size` (`FONT_FACTORS`). Scales all text incl. px. |
+| `fontSize` | גודל טקסט | 4 | class `a11y-zoom-{n}` → CSS `zoom` on page content (1.15–1.60). React-proof, persists across pages; scales px/rem alike. |
 | `lineHeight` | גובה שורה | 3 | class `a11y-lh-{n}`. |
 | `letterSpacing` | מרווח אותיות | 3 | class `a11y-ls-{n}` (letter-spacing only). |
 | `wordSpacing` | מרווח מילים | 3 | class `a11y-ws-{n}` (word-spacing). |
@@ -183,13 +183,15 @@ Popups are `.a11y-modal-overlay` absolutely covering the panel (`role="dialog" a
 
 ## 11. Constraints & gotchas
 
-- **Font scaling walks the DOM** (querySelectorAll('*') under body) and sets inline `font-size` on each element — robust across px/rem. While a size level is active, a debounced `MutationObserver` on `document.body` re-applies the scale to newly added nodes, so the size **persists across SPA route changes and dynamically loaded content**. Other features are class-based on `<html>`, so they already apply to new content automatically. All settings persist across full page loads via `localStorage`.
+- **Font size uses CSS `zoom`** via a class on `<html>` (`a11y-zoom-{n}`), so it persists across SPA navigation and React re-renders and applies to new content automatically (no per-element inline styles → React can't clobber it). `zoom` scales the whole content block (text + images), like page zoom. The widget is excluded (`body > *:not(#a11y-widget-host):not(#a11y-widget-root)`). All settings persist via `localStorage`.
+- **Stop animations** uses `animation: none !important; transition: none !important` on all elements — this stops **CSS** animations/transitions. **JS-library animations** (Framer Motion, GSAP, React Spring, etc.) animate via inline styles/`requestAnimationFrame` and are NOT stopped by CSS; stopping those requires the host site to honor `prefers-reduced-motion`.
 - `html.style.filter` (grayscale/sepia/invert) also affects the widget; invert inverts the whole page including the widget (consistent "invert colors" behavior).
 - High contrast (dark/light) force-colors with `!important`; CSS background-images get covered. `<img>` content stays visible.
 - TTS needs a Hebrew OS/browser voice.
 - Permanent hide is recoverable via Alt+Shift+A or clearing the `a11yWidgetHidden` cookie.
 - Render a single instance (fixed element ids).
-- **Mobile**: on screens ≤480px the panel opens as a near-full-width **bottom sheet** (`@media` overrides the inline absolute position with `!important`), header buttons are enlarged, and the reading mask follows `touchmove` as well as `mousemove`.
+- **Mobile**: on screens ≤480px the panel opens as a near-full-width **bottom sheet** (`@media` overrides the inline absolute position with `!important`), with `max-height: 82dvh` (dynamic viewport height — fits the *visible* screen so the top is never cut off; `82vh` fallback) and compact paddings/tiles. Header buttons are enlarged; the reading mask follows `touchmove` as well as `mousemove`.
+- **Draggable button**: the FAB is draggable via Pointer Events (mouse + touch; `touch-action:none`). Drag handlers (`onDragPointerDown/Move/Up`) track movement; past a 6px threshold it becomes a drag and updates `pos {top,left}` (clamped to the viewport), suppressing the click so it won't open. The position persists in `localStorage` key `a11y-widget-pos`. When a custom `pos` is set, the panel's open direction (up/down, left/right) is recomputed from the button's location relative to the viewport center (on mobile the bottom-sheet `@media` takes over regardless).
 - jsdom lacks `innerText`; code uses `innerText||textContent`.
 
 ---
@@ -223,3 +225,7 @@ After **any** change to the component, update **both** guides: this AI guide and
 - Page structure: clicking a heading scrolls to it (centered) and highlights it with a yellow frame that clears after 15 seconds.
 - Mobile: panel opens as a bottom sheet on small screens; reading mask follows touch.
 - Font size persists across page navigation (SPA) and dynamically loaded content via a MutationObserver; all settings persist via localStorage.
+- Font size **switched from per-element DOM-walk to CSS `zoom`** (class on `<html>`) — fixes persistence across pages on React sites (React no longer clobbers it).
+- Stop animations strengthened to `animation/transition: none` (stops CSS animations); JS-library animations need `prefers-reduced-motion`.
+- Mobile panel now sized with `dvh` (fits the visible screen, no top cutoff) and made more compact.
+- The button is now **draggable** on touch & mouse; its position persists (`a11y-widget-pos`).

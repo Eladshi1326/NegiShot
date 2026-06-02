@@ -39,7 +39,8 @@ const STORAGE_KEY = 'a11y-widget-settings-v3';
 const HIDE_COOKIE = 'a11yWidgetHidden';
 
 // מקדמי הגדלת טקסט (אינדקס 0 = רגיל)
-const FONT_FACTORS = [1, 1.15, 1.3, 1.45, 1.6];
+const FONT_FACTORS = [1, 1.25, 1.5, 1.75, 2];
+const FONT_LABELS = FONT_FACTORS.map((x) => (x === 1 ? '' : 'פי ' + x));
 const ALIGN_NAMES = ['ברירת מחדל', 'לימין', 'למרכז', 'לשמאל', 'מוצדק'];
 const CONTRAST_NAMES = ['', 'כהה', 'בהיר', 'היפוך'];
 const GRAY_NAMES = ['', 'אפור', 'ספיה'];
@@ -132,10 +133,10 @@ const WIDGET_CSS = `
 html.a11y-active { scrollbar-gutter: stable; }
 
 /* גודל טקסט/תוכן – דרך zoom על תוכן הדף (לא נוגע בווידג'ט); אמין ונשמר בין עמודים */
-html.a11y-zoom-1 body > *:not(#a11y-widget-host):not(#a11y-widget-root):not(script):not(style):not([data-a11y-widget-mount]) { zoom: 1.15; }
-html.a11y-zoom-2 body > *:not(#a11y-widget-host):not(#a11y-widget-root):not(script):not(style):not([data-a11y-widget-mount]) { zoom: 1.30; }
-html.a11y-zoom-3 body > *:not(#a11y-widget-host):not(#a11y-widget-root):not(script):not(style):not([data-a11y-widget-mount]) { zoom: 1.45; }
-html.a11y-zoom-4 body > *:not(#a11y-widget-host):not(#a11y-widget-root):not(script):not(style):not([data-a11y-widget-mount]) { zoom: 1.60; }
+html.a11y-zoom-1 body > *:not(#a11y-widget-host):not(#a11y-widget-root):not(script):not(style):not([data-a11y-widget-mount]) { zoom: 1.25; }
+html.a11y-zoom-2 body > *:not(#a11y-widget-host):not(#a11y-widget-root):not(script):not(style):not([data-a11y-widget-mount]) { zoom: 1.5; }
+html.a11y-zoom-3 body > *:not(#a11y-widget-host):not(#a11y-widget-root):not(script):not(style):not([data-a11y-widget-mount]) { zoom: 1.75; }
+html.a11y-zoom-4 body > *:not(#a11y-widget-host):not(#a11y-widget-root):not(script):not(style):not([data-a11y-widget-mount]) { zoom: 2; }
 
 html.a11y-lh-1 body *${EX} { line-height: 1.6 !important; }
 html.a11y-lh-2 body *${EX} { line-height: 1.9 !important; }
@@ -199,14 +200,14 @@ html.a11y-focus-highlight :is(a,button,input,textarea,select,[tabindex]):focus:n
 }
 
 /* ===== עיצוב הווידג'ט ===== */
-#a11y-widget-root { font-size: 16px; }
+#a11y-widget-root { font-size: 16px; line-height: normal; letter-spacing: normal; word-spacing: normal; }
 #a11y-widget-root *, #a11y-widget-root *::before, #a11y-widget-root *::after { box-sizing: border-box; font-family: Arial, 'Segoe UI', Tahoma, sans-serif; }
 #a11y-widget-toggle { border: none; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(0,0,0,.32); cursor: pointer; padding: 0; transition: transform .15s ease, box-shadow .15s ease; touch-action: none; user-select: none; -webkit-user-select: none; }
 #a11y-widget-toggle:hover { transform: scale(1.07); }
 #a11y-widget-toggle:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 #a11y-widget-toggle img { display: block; }
 
-#a11y-panel { width: 340px; max-width: calc(100vw - 28px); overflow-y: auto; background: #eceefb; border-radius: 18px; box-shadow: 0 14px 40px rgba(20,20,60,.30); border: 1px solid #d9ddf5; padding: 0 0 12px; direction: rtl; }
+#a11y-panel { width: 340px; max-width: calc(100vw - 28px); overflow-y: auto; background: #eceefb; border-radius: 18px; box-shadow: 0 14px 40px rgba(20,20,60,.30); border: 1px solid #d9ddf5; padding: 0; direction: rtl; }
 #a11y-panel:focus { outline: none; }
 
 .a11y-head { position: sticky; top: 0; z-index: 2; background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.12)), var(--a11y-accent, #2b50e0); color: #fff; padding: 14px 16px; border-radius: 18px 18px 0 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -260,12 +261,17 @@ html.a11y-focus-highlight :is(a,button,input,textarea,select,[tabindex]):focus:n
 .a11y-h-tag { flex: none; font-size: 10px; font-weight: 800; color: #fff; background: var(--a11y-accent, #2b50e0); border-radius: 5px; padding: 2px 6px; min-width: 26px; text-align: center; }
 .a11y-struct-empty { color: #8a8fb0; font-size: 13px; padding: 8px 4px; }
 .a11y-menu-title { font-size: 15px; font-weight: 800; color: #1c2030; margin: 4px 4px 12px; }
-.a11y-menu-cancel { width: 100%; text-align: center; background: transparent; border: none; color: #6b7090; font-weight: 700; padding: 12px; cursor: pointer; border-radius: 12px; }
-.a11y-menu-cancel:hover { background: #eef0f8; }
+.a11y-menu-cancel { width: 100%; text-align: center; background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.12)), var(--a11y-accent, #2b50e0); border: none; color: #fff; font-weight: 800; padding: 13px; cursor: pointer; border-radius: 12px; }
+.a11y-menu-cancel:hover { filter: brightness(1.07); }
 
-.a11y-foot { text-align: center; font-size: 11px; color: #9aa0c0; padding: 2px 0 0; }
+.a11y-foot { position: sticky; bottom: 0; z-index: 2; text-align: center; font-size: 12px; background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.12)), var(--a11y-accent, #2b50e0); color: #fff; padding: 12px; border-radius: 0 0 18px 18px; }
+.a11y-foot .a11y-credit { color: #fff; font-weight: 800; text-decoration: none; }
+.a11y-foot .a11y-credit:hover { text-decoration: underline; color: #fff; }
 .a11y-mask-band { position: fixed; left: 0; right: 0; background: rgba(0,0,0,.6); pointer-events: none; }
 .a11y-jump-highlight { outline: 3px solid #ffd400 !important; outline-offset: 3px !important; box-shadow: 0 0 0 5px rgba(255,212,0,.35) !important; border-radius: 3px !important; scroll-margin-top: 24px; scroll-margin-bottom: 24px; }
+
+/* הסתרת כלים שלא רלוונטיים למסך מגע (סמן גדול, מסכת קריאה, מסגרת מיקוד) */
+@media (pointer: coarse) { .a11y-no-touch { display: none !important; } }
 
 /* ===== מובייל ===== */
 @media (max-width: 480px) {
@@ -327,6 +333,8 @@ const TILE_ICON = {
   hideImages: 'image', stopAnimations: 'motion', readingMask: 'mask', focusHighlight: 'focus',
   bigCursor: 'cursor', pageStructure: 'structure',
 };
+
+const TOUCH_HIDE = { readingMask: true, focusHighlight: true, bigCursor: true };
 
 const SECTIONS = [
   { title: 'טקסט', tiles: [
@@ -651,9 +659,9 @@ export default function AccessibilityWidget({
     const names = t.names || ALIGN_NAMES;
     let pressed = false, sub = null, bars = null;
     if (t.type === 'toggle') pressed = !!val;
-    else if (t.type === 'level') { pressed = val > 0; bars = (
-      <span className="a11y-bars" aria-hidden="true">{Array.from({ length: t.max }).map((_, i) => <i key={i} className={i < val ? 'on' : ''} />)}</span>
-    ); }
+    else if (t.type === 'level') { pressed = val > 0;
+      const lvlText = val === 0 ? 'רגיל' : (t.key === 'fontSize' ? (FONT_LABELS[val] || '') : ('רמה ' + val));
+      sub = <span className="a11y-tile-sub">{lvlText}</span>; }
     else if (t.type === 'cycle') { pressed = val > 0; sub = <span className="a11y-tile-sub">{names[val] || ''}</span>; }
 
     const onClick = t.type === 'toggle' ? () => toggle(t.key)
@@ -663,7 +671,7 @@ export default function AccessibilityWidget({
       : t.type === 'cycle' ? t.label + ' ' + (names[val] || 'כבוי') : t.label;
 
     return (
-      <button key={t.key} type="button" className="a11y-tile" aria-pressed={t.type === 'action' ? undefined : pressed} aria-label={ariaLabel} onClick={onClick}>
+      <button key={t.key} type="button" className={'a11y-tile' + (TOUCH_HIDE[t.key] ? ' a11y-no-touch' : '')} aria-pressed={t.type === 'action' ? undefined : pressed} aria-label={ariaLabel} onClick={onClick}>
         <span className="a11y-tile-main"><span className="a11y-tile-label">{t.label}</span>{sub}{bars}</span>
         <span className="a11y-tile-ic">{ICONS[TILE_ICON[t.key]]}</span>
       </button>
@@ -728,10 +736,14 @@ export default function AccessibilityWidget({
                     {speaking ? 'עצירת הקראה' : 'הקראת הדף בקול'}
                   </button>
                 </div>
-                {!hideBranding && <div className="a11y-foot">{brandLabel} · נגישות בהתאם לת"י 5568</div>}
+                
               </>
             )}
           </div>
+
+          {!hideBranding && (
+            <div className="a11y-foot"><a className="a11y-credit" href="https://nrgisutbekalot.netlify.app/" target="_blank" rel="noopener noreferrer">נגישות בקלות</a></div>
+          )}
 
           {view === 'hide' && (
             <div className="a11y-modal-overlay" role="dialog" aria-label="הסתרת כפתור הנגישות" aria-modal="true">

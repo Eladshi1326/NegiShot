@@ -273,6 +273,17 @@ html.a11y-focus-highlight :is(a,button,input,textarea,select,[tabindex]):focus:n
 /* הסתרת כלים שלא רלוונטיים למסך מגע (סמן גדול, מסכת קריאה, מסגרת מיקוד) */
 @media (pointer: coarse) { .a11y-no-touch { display: none !important; } }
 
+.a11y-drop { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; animation: a11yDropIn .14s ease; }
+.a11y-drop-circle { width: 48px; height: 48px; border-radius: 50%; background: rgba(22,24,44,.42); border: 2px dashed rgba(255,255,255,.78); display: flex; align-items: center; justify-content: center; color: #fff; transition: transform .12s ease, background .12s ease, border-color .12s ease; }
+.a11y-drop-circle svg { width: 21px; height: 21px; fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; }
+.a11y-drop.over .a11y-drop-circle { background: rgba(214,40,40,.92); border-color: #fff; border-style: solid; transform: scale(1.16); }
+.a11y-drop-label { font-size: 11px; font-weight: 700; color: #fff; background: rgba(22,24,44,.62); padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+@keyframes a11yDropIn { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%); } }
+.a11y-modal-overlay.a11y-standalone { position: fixed; inset: 0; border-radius: 0; z-index: 100; }
+.a11y-modal-overlay.a11y-standalone .a11y-modal { max-width: 340px; }
+.a11y-standalone .a11y-modal-btn.cancel { background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.12)), var(--a11y-accent, #2b50e0); color: #fff; font-weight: 800; }
+.a11y-standalone .a11y-modal-btn.cancel:hover { filter: brightness(1.07); }
+
 /* ===== מובייל ===== */
 @media (max-width: 480px) {
   #a11y-panel {
@@ -388,6 +399,12 @@ export default function AccessibilityWidget({
   const posRef = useRef(null);
   const dragRef = useRef(null);
   const draggedRef = useRef(false);
+  const [dragUI, setDragUI] = useState(false);
+  const [overTrashUI, setOverTrashUI] = useState(false);
+  const dragActiveRef = useRef(false);
+  const overTrashRef = useRef(false);
+  const isTouchDragRef = useRef(false);
+  const [hidePrompt, setHidePrompt] = useState(false);
 
   const rootRef = useRef(null);
   const panelRef = useRef(null);
@@ -528,8 +545,9 @@ export default function AccessibilityWidget({
   const onDragPointerDown = useCallback((e) => {
     if (!toggleRef.current) return;
     draggedRef.current = false;
+    isTouchDragRef.current = (e.pointerType === 'touch');
     const r = toggleRef.current.getBoundingClientRect();
-    dragRef.current = { sx: e.clientX, sy: e.clientY, top: r.top, left: r.left, moved: 0, dragging: false };
+    dragRef.current = { sx: e.clientX, sy: e.clientY, top: r.top, left: r.left, moved: 0, dragging: false, prevPos: posRef.current };
     try { toggleRef.current.setPointerCapture(e.pointerId); } catch (err) { /* */ }
   }, []);
   const onDragPointerMove = useCallback((e) => {
@@ -546,6 +564,12 @@ export default function AccessibilityWidget({
       };
       posRef.current = np;
       setPos(np);
+      if (isTouchDragRef.current) {
+        const near = (e.clientY > vh - 150) && (Math.abs(e.clientX - vw / 2) < 110);
+        if (near !== dragActiveRef.current) { dragActiveRef.current = near; setDragUI(near); }
+        const over = near && (e.clientY > vh - 92) && (Math.abs(e.clientX - vw / 2) < 72);
+        if (over !== overTrashRef.current) { overTrashRef.current = over; setOverTrashUI(over); }
+      }
     }
   }, []);
   const onDragPointerUp = useCallback((e) => {
@@ -553,8 +577,15 @@ export default function AccessibilityWidget({
     try { if (toggleRef.current) toggleRef.current.releasePointerCapture(e.pointerId); } catch (err) { /* */ }
     if (d && d.dragging) {
       draggedRef.current = true; // למנוע שהלחיצה תיפתח אחרי גרירה
-      try { window.localStorage.setItem('a11y-widget-pos', JSON.stringify(posRef.current)); } catch (err) { /* */ }
+      if (overTrashRef.current) {
+        posRef.current = d.prevPos; setPos(d.prevPos);
+        setHidePrompt(true);
+      } else {
+        try { window.localStorage.setItem('a11y-widget-pos', JSON.stringify(posRef.current)); } catch (err) { /* */ }
+      }
     }
+    dragActiveRef.current = false; overTrashRef.current = false;
+    setDragUI(false); setOverTrashUI(false); isTouchDragRef.current = false;
   }, []);
 
   const cycle = useCallback((key, max) => { setSettings((s) => ({ ...s, [key]: s[key] >= max ? 0 : s[key] + 1 })); }, []);
@@ -687,7 +718,13 @@ export default function AccessibilityWidget({
         </>
       )}
 
-      <button id="a11y-widget-toggle" ref={toggleRef} type="button" style={toggleStyle}
+      {dragUI && (
+        <div className={'a11y-drop' + (overTrashUI ? ' over' : '')} aria-hidden="true">
+          <div className="a11y-drop-label">{overTrashUI ? 'שחרר כדי להסתיר' : 'גרור לכאן כדי להסתיר'}</div>
+          <div className="a11y-drop-circle"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></div>
+        </div>
+      )}
+      <button id="a11y-widget-toggle" ref={toggleRef} type="button" style={hidePrompt ? { ...toggleStyle, display: 'none' } : toggleStyle}
         aria-label={open ? 'סגירת תפריט נגישות' : buttonLabel}
         aria-expanded={open} aria-haspopup="dialog" aria-controls="a11y-panel"
         onPointerDown={onDragPointerDown} onPointerMove={onDragPointerMove}
@@ -767,6 +804,19 @@ export default function AccessibilityWidget({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {hidePrompt && (
+        <div className="a11y-modal-overlay a11y-standalone" role="dialog" aria-modal="true" aria-label="הסתרת כפתור הנגישות">
+          <div className="a11y-modal">
+            <div className="a11y-modal-title">להסתיר את כפתור הנגישות? לכמה זמן?</div>
+            <button type="button" className="a11y-modal-btn" onClick={() => { hideFor(8 * 3600); setHidePrompt(false); }}>ל‑8 שעות</button>
+            <button type="button" className="a11y-modal-btn" onClick={() => { hideFor(24 * 3600); setHidePrompt(false); }}>ל‑24 שעות</button>
+            <button type="button" className="a11y-modal-btn danger" onClick={() => { hideFor(10 * 365 * 24 * 3600); setHidePrompt(false); }}>לצמיתות</button>
+            <button type="button" className="a11y-modal-btn cancel" onClick={() => setHidePrompt(false)}>ביטול</button>
+            <div className="a11y-modal-note">אפשר תמיד להחזיר עם Alt+Shift+A</div>
+          </div>
         </div>
       )}
     </div>

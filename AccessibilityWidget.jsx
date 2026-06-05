@@ -264,9 +264,9 @@ html.a11y-focus-highlight :is(a,button,input,textarea,select,[tabindex]):focus:n
 .a11y-menu-cancel { width: 100%; text-align: center; background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.12)), var(--a11y-accent, #2b50e0); border: none; color: #fff; font-weight: 800; padding: 13px; cursor: pointer; border-radius: 12px; }
 .a11y-menu-cancel:hover { filter: brightness(1.07); }
 
-.a11y-foot { position: sticky; bottom: 0; z-index: 2; text-align: center; font-size: 12px; background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.12)), var(--a11y-accent, #2b50e0); color: #fff; padding: 12px; border-radius: 0 0 18px 18px; }
-.a11y-foot .a11y-credit { color: #fff; font-weight: 800; text-decoration: none; }
-.a11y-foot .a11y-credit:hover { text-decoration: underline; color: #fff; }
+.a11y-foot { position: sticky; bottom: 0; z-index: 2; display: block; text-align: center; font-size: 12px; font-weight: 800; text-decoration: none; background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.12)), var(--a11y-accent, #2b50e0); color: #fff; padding: 12px; border-radius: 0 0 18px 18px; cursor: pointer; transition: filter .12s ease; }
+.a11y-foot:hover { filter: brightness(1.07); text-decoration: underline; }
+.a11y-foot:focus-visible { outline: 3px solid #fff; outline-offset: -3px; }
 .a11y-mask-band { position: fixed; left: 0; right: 0; background: rgba(0,0,0,.6); pointer-events: none; }
 .a11y-jump-highlight { outline: 3px solid #ffd400 !important; outline-offset: 3px !important; box-shadow: 0 0 0 5px rgba(255,212,0,.35) !important; border-radius: 3px !important; scroll-margin-top: 24px; scroll-margin-bottom: 24px; }
 
@@ -779,7 +779,7 @@ export default function AccessibilityWidget({
           </div>
 
           {!hideBranding && (
-            <div className="a11y-foot"><a className="a11y-credit" href="https://nrgisutbekalot.netlify.app/" target="_blank" rel="noopener noreferrer">נגישות בקלות</a></div>
+            <a className="a11y-foot" href="https://nrgisutbekalot.netlify.app/" target="_blank" rel="noopener noreferrer">נגישות בקלות</a>
           )}
 
           {view === 'hide' && (

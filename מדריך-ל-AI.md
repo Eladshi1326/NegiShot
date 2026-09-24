@@ -13,7 +13,7 @@ If you (the AI) are asked to add this widget to a site, **do not assume styling*
 3. **Size** — button diameter in px (default `58`).
 4. **Shape** — `circle` (default) or `rounded` square.
 5. **Icon** — built-in accessibility icon, or a custom image (`iconSrc`)?
-6. **Brand label** — bottom text (default `נגישות`) or hide it (`hideBranding`).
+6. **Footer credit** — the panel's bottom bar is a fixed credit link "נגישות בקלות" (→ `https://nrgisutbekalot.netlify.app/`). Keep it (default) or hide it (`hideBranding` / `data-hide-branding="true"`). `brandLabel` is **deprecated and ignored**.
 7. **Defaults on** — any setting ON by default for all visitors? → `initialSettings`.
 
 Then render with matching props (§3). Confirm the framework (React/Next.js/Vite/CRA) and where the global layout/App file is, so the widget mounts once, app-wide.
@@ -41,16 +41,29 @@ Then render with matching props (§3). Confirm the framework (React/Next.js/Vite
 5. **Render one instance only** (fixed element IDs).
 
 ### Standalone script (any site, incl. non-React) — `embed.jsx` → `dist/accessibility-widget.js`
-For non-React sites, or one-line drop-in + auto-update, use the bundled script (React is bundled inside):
+For non-React sites, or drop-in + auto-update, use the bundled script (React is bundled inside). **Recommended embed = the daily "loader"** (paste once, before `</body>`, wrapped in the START/END comments):
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Eladshi1326/NegiShot@main/dist/accessibility-widget.js"
-        data-a11y-widget data-position="bottom-right" data-color="#2b50e0" defer></script>
+<!-- ACCESSIBILITY WIDGET - START -->
+<script>
+(function () {
+  window.A11yWidgetConfig = { position: 'bottom-right', color: '#2b50e0' };
+  var v = new Date().toISOString().slice(0, 10); // changes daily → browser re-fetches daily
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/gh/Eladshi1326/NegiShot@main/dist/accessibility-widget.js?v=' + v;
+  s.setAttribute('data-a11y-widget', '');
+  document.body.appendChild(s);
+})();
+</script>
+<!-- ACCESSIBILITY WIDGET - END -->
 ```
-- `embed.jsx` reads config, priority low→high: script tag `data-*` → `window.A11yWidgetConfig` → `AccessibilityWidget.init(options)`. It creates a `#a11y-widget-host` div, renders the component into it, and auto-inits on load unless `data-auto="false"`.
+- **Why the loader:** jsDelivr serves floating refs (`@main`) with `Cache-Control: max-age=604800` (browsers keep the file **7 days**) and `s-maxage=43200` (CDN 12h). Purging clears only the CDN, not visitors' browsers. The `?v=<date>` makes the URL change daily, so every returning visitor gets updates within ~1 day. For ~1h freshness use `slice(0, 13)`.
+- The plain one-line tag still works (`<script src=".../accessibility-widget.js" data-a11y-widget data-position=… data-color=… defer></script>`), but returning visitors may see an old version for up to 7 days.
+- **Double-load guard:** `embed.jsx` sets `window.__a11yWidgetLoaded`; if the page contains both an old tag and the loader, only the first one runs. Still, replace old blocks instead of adding a second.
+- `embed.jsx` finds its own script via `document.currentScript` → `script[data-a11y-widget]` → any script whose src contains `accessibility-widget`. Config priority low→high: script tag `data-*` → `window.A11yWidgetConfig` → `AccessibilityWidget.init(options)`. It creates a `#a11y-widget-host` div, renders the component into it, and auto-inits unless `data-auto="false"`.
 - Global API: `window.AccessibilityWidget.{ init, update, unmount, getConfig }` — `update(opts)` re-renders with new props at runtime.
-- `data-*` keys map to every prop: `data-position`, `data-color`, `data-icon-color`, `data-size`, `data-shape`, `data-icon-src`, `data-offset`, `data-z-index`, `data-brand-label`, `data-hide-branding`, `data-button-label`, `data-initial` (JSON).
-- Build: `npm run build` → `build.mjs` → esbuild IIFE, minified, `NODE_ENV=production`, React bundled → `dist/accessibility-widget.js` (~224KB / ~70KB gzip).
-- Auto-update: host on GitHub, serve via jsDelivr; push → CDN serves new file (`@latest` cache ~7d; use a version tag or purge URL for instant). Full details in `README-הפצה.md`.
+- Config keys (as `A11yWidgetConfig` props or `data-*`): `position`, `color`, `iconColor`/`data-icon-color`, `size`, `shape`, `iconSrc`/`data-icon-src`, `offset`, `zIndex`/`data-z-index`, `hideBranding`/`data-hide-branding`, `buttonLabel`/`data-button-label`, `initialSettings`/`data-initial` (JSON). (`brandLabel`/`data-brand-label` is deprecated and ignored.)
+- Build: `npm run build` → `build.mjs` → esbuild IIFE, minified, `NODE_ENV=production`, React bundled → `dist/accessibility-widget.js` (~181KB).
+- Publish: `העלאה-לגיט.bat` pushes to GitHub and purges the jsDelivr CDN. Full details in `README-הפצה.md`.
 - **For React projects prefer the import method above** (avoids loading a second React instance).
 
 ---
@@ -68,8 +81,8 @@ For non-React sites, or one-line drop-in + auto-update, use the bundled script (
 | `icon` | React node | `null` | Custom icon node (overrides `iconSrc`). |
 | `offset` | number px | `20` | Distance from edges. |
 | `zIndex` | number | `2147483000` | Stacking; mask bands use `zIndex-1`. |
-| `brandLabel` | string | `'נגישות'` | Footer label. |
-| `hideBranding` | boolean | `false` | Hide footer label. |
+| `brandLabel` | string | `'נגישות'` | **Deprecated — ignored** (kept only so old configs don't break). |
+| `hideBranding` | boolean | `false` | Hide the footer credit bar "נגישות בקלות". |
 | `buttonLabel` | string | `'פתיחת תפריט נגישות'` | Button `aria-label` when closed. |
 | `initialSettings` | object | `null` | Per-site default settings; also the target of "reset". |
 
@@ -78,7 +91,7 @@ For non-React sites, or one-line drop-in + auto-update, use the bundled script (
 <AccessibilityWidget />
 <AccessibilityWidget position="bottom-left" color="#e11d48" />
 <AccessibilityWidget size={72} shape="rounded" color="#0ea5e9" iconColor="#fff" />
-<AccessibilityWidget iconSrc="/logo-a11y.png" brandLabel="האתר שלי" />
+<AccessibilityWidget iconSrc="/logo-a11y.png" />
 <AccessibilityWidget initialSettings={{ highlightLinks: true, fontSize: 1 }} hideBranding />
 ```
 
@@ -90,7 +103,7 @@ State object `settings`, initialized to `baseSettings = { ...DEFAULTS, ...(initi
 
 ```js
 const DEFAULTS = {
-  fontSize: 0,        // level 0–4  -> FONT_FACTORS = [1, 1.15, 1.3, 1.45, 1.6]
+  fontSize: 0,        // level 0–4  -> FONT_FACTORS = [1, 1.25, 1.5, 1.75, 2]  (labels "פי 1.25" … "פי 2")
   lineHeight: 0,      // level 0–3  -> 1.6 / 1.9 / 2.3
   letterSpacing: 0,   // level 0–3  -> .06 / .12 / .2 em
   wordSpacing: 0,     // level 0–3  -> .18 / .36 / .6 em
@@ -115,9 +128,9 @@ const DEFAULTS = {
 
 **Main effect** `useEffect([settings, baseSettings])`: adds `a11y-active` (scrollbar-gutter); sets level classes `a11y-lh/ls/ws-{n}` and `a11y-align-{dir}`; toggles boolean classes; sets `html.style.filter` from grayscale (`grayscale(100%)`/`sepia(100%)`) + contrast invert (`invert(1) hue-rotate(180deg)`); toggles `a11y-contrast-dark`/`a11y-contrast-light`; lazy-loads dyslexia font; persists.
 
-**Font size (zoom):** handled in the main effect via `setLevelClass(html,'a11y-zoom',fontSize,4)`. CSS rules `html.a11y-zoom-{n} body > *:not(#a11y-widget-host):not(#a11y-widget-root)…{ zoom: 1.15/1.30/1.45/1.60 }` scale the page content. Because it is a **class on `<html>`** (not inline styles on elements), it is **React-proof and persists across page navigation / re-renders**, and applies to dynamically added content automatically. `zoom` scales px/rem/em alike. The widget is excluded, so it keeps its own size. (The old per-element `applyFontScale`/`clearFontScale` helpers remain in the file but are no longer the scaling mechanism.)
+**Font size (zoom):** handled in the main effect via `setLevelClass(html,'a11y-zoom',fontSize,4)`. CSS rules `html.a11y-zoom-{n} body > *:not(#a11y-widget-host):not(#a11y-widget-root)…{ zoom: 1.25/1.5/1.75/2 }` scale the page content. Because it is a **class on `<html>`** (not inline styles on elements), it is **React-proof and persists across page navigation / re-renders**, and applies to dynamically added content automatically. `zoom` scales px/rem/em alike. The widget is excluded, so it keeps its own size. (The old per-element `applyFontScale`/`clearFontScale` helpers remain in the file but are no longer the scaling mechanism.)
 
-**Scoping:** global rules exclude the widget via `EX = ':not(#a11y-widget-root):not(#a11y-widget-root *)'`. (Filters on `<html>` — grayscale/sepia/invert — also affect the widget, which is acceptable/consistent.)
+**Scoping:** global rules exclude the widget via `EX = ':not(#a11y-widget-root):not(#a11y-widget-root *)'`. Because the mount div `#a11y-widget-host` is *not* excluded and `line-height`/`letter-spacing`/`word-spacing` are **inherited**, `#a11y-widget-root` resets them (`line-height:normal; letter-spacing:normal; word-spacing:normal; font-size:16px`) so text-spacing tools never distort the panel. (Filters on `<html>` — grayscale/sepia/invert — also affect the widget, which is acceptable/consistent.)
 
 **Layout:** container `position:fixed` at the corner sized to the button; panel `position:absolute` (`bottom|top:size+12`, `right|left:0`, `maxHeight: min(640px, calc(100vh - (offset+size+28)px))`). Button never shifts when the panel opens.
 
@@ -125,10 +138,10 @@ const DEFAULTS = {
 
 ## 6. Feature reference
 
-**Leveled (bars indicator, cyclic, wrap to 0)** — handler `cycle(key,max)`:
+**Leveled (cyclic, wrap to 0)** — handler `cycle(key,max)`. Each tile always shows a one-line value sub-label (fixed tile height, no bars): level 0 → "רגיל"; `fontSize` → "פי 1.25/1.5/1.75/2" (`FONT_LABELS`); others → "רמה N".
 | key | label | max | mechanism |
 |---|---|---|---|
-| `fontSize` | גודל טקסט | 4 | class `a11y-zoom-{n}` → CSS `zoom` on page content (1.15–1.60). React-proof, persists across pages; scales px/rem alike. |
+| `fontSize` | גודל טקסט | 4 | class `a11y-zoom-{n}` → CSS `zoom` on page content (1.25–2). React-proof, persists across pages; scales px/rem alike. |
 | `lineHeight` | גובה שורה | 3 | class `a11y-lh-{n}`. |
 | `letterSpacing` | מרווח אותיות | 3 | class `a11y-ls-{n}` (letter-spacing only). |
 | `wordSpacing` | מרווח מילים | 3 | class `a11y-ws-{n}` (word-spacing). |
@@ -157,6 +170,10 @@ Header has three buttons:
 
 Popups are `.a11y-modal-overlay` absolutely covering the panel (`role="dialog" aria-modal="true"`), visually separate from the menu. Esc backs out one level (popup/sub-view → main → close).
 
+**Footer credit bar:** the whole bottom bar is one link `<a class="a11y-foot">נגישות בקלות</a>` → `https://nrgisutbekalot.netlify.app/` (new tab), `position:sticky; bottom:0` so it is always visible, styled with the accent gradient + white text (like the header). Hidden by `hideBranding`.
+
+**"חזרה" button** (page-structure view, `.a11y-menu-cancel`) uses the same accent gradient + white text so it reads as a button.
+
 ---
 
 ## 8. Special features
@@ -164,6 +181,10 @@ Popups are `.a11y-modal-overlay` absolutely covering the panel (`role="dialog" a
 **Reading mask** (`readingMask`): `mousemove` updates `maskY`; two `position:fixed` `.a11y-mask-band` divs (`rgba(0,0,0,.6)`, `pointer-events:none`, `zIndex-1`) leave a ~140px clear strip, and the strip edges have a **bright yellow border** (`3px solid #ffd400`) for clarity.
 
 **Page structure** (`pageStructure`): `openStructure()` collects `h1–h6` (excluding widget; text via `innerText||textContent`), assigns missing ids, stores `{id,text,level}`. The list shows each item with an **`H{level}` SEO tag chip** (`.a11y-h-tag`) next to the text, indented by hierarchy; clicking → `gotoHeading(id)`: smooth-scrolls (centered), focuses, marks the heading with a **yellow highlight frame** (`.a11y-jump-highlight` — outline + ring) that **auto-clears after 15 seconds** via `setTimeout` (tracked in `jumpRef`, cleared/replaced on a new jump and on unmount). The **panel stays open** after a jump so the user can navigate to more headings.
+
+**Touch devices:** under `@media (pointer: coarse)` the tiles `bigCursor`, `readingMask`, `focusHighlight` get class `a11y-no-touch` and are hidden (no mouse cursor / hover / Tab navigation on phones). Driven by `TOUCH_HIDE`.
+
+**Drag-to-hide (touch only):** while dragging the button with a finger (`pointerType === 'touch'`), a small semi-transparent X drop zone (`.a11y-drop`, 48px, `bottom:14px`, centered) fades in only when the finger nears the bottom-center; it turns red when over it. Releasing there snaps the button back to its previous position, hides the button, and opens a **standalone** hide prompt (`hidePrompt` state, `.a11y-modal-overlay.a11y-standalone`, full-screen, independent of the panel) with 8h / 24h / permanent / "ביטול" (accent-colored). The prompt moves focus inside, traps Tab, closes on Esc, and returns focus to the button.
 
 **Big cursor** (`bigCursor`): large black arrow cursor for everything; a large black **hand/pointer** cursor for clickables (`a, button, [role=button], input[type=button/submit/reset], label, select, summary`). Both are inline SVG data-URIs (`CUR_ARROW`, `CUR_HAND`).
 
@@ -230,4 +251,12 @@ After **any** change to the component, update **both** guides: this AI guide and
 - Mobile panel now sized with `dvh` (fits the visible screen, no top cutoff) and made more compact.
 - The button is now **draggable** on touch & mouse; its position persists (`a11y-widget-pos`).
 - Drag: fixed needing to tap twice after a drag (the click right after a drag is suppressed; `draggedRef` resets on each new `pointerdown`). On a **mobile↔desktop viewport switch** the button snaps back to its default corner and clears the saved position (resize/orientationchange listener crossing the 480px breakpoint); the loaded position is clamped into the viewport so it's never off-screen.
-- **Embed URL uses `@main`** (tracks the branch), NOT `@latest` — on jsDelivr `@latest` points to the latest **tag/release**, not your commits, so it never updated. `@main` cache ≈ 12h; purge for instant.
+- **Embed URL uses `@main`** (tracks the branch), NOT `@latest` — on jsDelivr `@latest` points to the latest **tag/release**, not your commits, so it never updated.
+- **Caching corrected:** jsDelivr floating refs are cached 12h at the CDN but **7 days in visitors' browsers**; purge only clears the CDN. Recommended embed is now the **daily loader** (`?v=<date>`), so returning visitors update within ~1 day.
+- `embed.jsx` double-load guard (`window.__a11yWidgetLoaded`).
+- Font steps changed to **×1.25 / 1.5 / 1.75 / 2**; leveled tiles show a fixed value line ("רגיל" / "פי 1.5" / "רמה 2") instead of bars, so tiles never grow.
+- Text-spacing tools no longer leak into the panel (root resets inherited spacing).
+- Touch devices hide big cursor / reading mask / focus frame.
+- Footer is a full-width sticky credit link "נגישות בקלות" in the accent color; `brandLabel` deprecated.
+- "חזרה" button styled as an accent button.
+- Drag-to-hide gesture on touch + standalone, keyboard-accessible hide prompt.

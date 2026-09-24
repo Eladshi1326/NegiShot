@@ -8,7 +8,7 @@
  *              data-position="bottom-right" data-color="#2b50e0" data-size="58"
  *              data-shape="circle" data-icon-color="#fff" data-icon-src="/logo.png"
  *              data-offset="20" data-z-index="2147483000"
- *              data-brand-label="האתר שלי" data-hide-branding="false"
+ *              data-hide-branding="false"
  *              data-button-label="פתיחת תפריט נגישות"
  *              data-initial='{"highlightLinks":true}' defer></script>
  *   2) אובייקט גלובלי לפני הסקריפט:  window.A11yWidgetConfig = { color:"#e11d48", size:64 };
@@ -20,6 +20,9 @@ import AccessibilityWidget from './AccessibilityWidget.jsx';
 
 (function () {
   if (typeof document === 'undefined') return;
+  // הגנה מטעינה כפולה (למשל אם באתר נשארה גם השורה הישנה וגם ה"טוען")
+  if (window.__a11yWidgetLoaded) return;
+  window.__a11yWidgetLoaded = true;
 
   // איתור תגית הסקריפט המטמיעה (לקריאת data-*)
   var thisScript = document.currentScript;

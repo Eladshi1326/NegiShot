@@ -20,8 +20,8 @@
  *   icon            : אלמנט React מותאם לאייקון (מתקדם).        ברירת מחדל null
  *   offset          : מרחק מקצה המסך בפיקסלים.                  ברירת מחדל 20
  *   zIndex          : שכבת תצוגה (צף מעל הכל).                  ברירת מחדל 2147483000
- *   brandLabel      : תווית קטנה בתחתית הפאנל.                  ברירת מחדל 'נגישות'
- *   hideBranding    : הסתרת שורת התווית בתחתית.                 ברירת מחדל false
+ *   brandLabel      : הוצא משימוש. נשמר רק לתאימות לאחור ולא מוצג (הפוטר תמיד "נגישות בקלות").
+ *   hideBranding    : הסתרת פס הפוטר "נגישות בקלות".            ברירת מחדל false
  *   buttonLabel     : טקסט נגיש (aria-label) לכפתור.            ברירת מחדל 'פתיחת תפריט נגישות'
  *   initialSettings : אובייקט הגדרות התחלתיות (ברירת מחדל לאתר). ברירת מחדל null
  *
@@ -29,7 +29,7 @@
  *   <AccessibilityWidget />
  *   <AccessibilityWidget position="bottom-left" color="#e11d48" />
  *   <AccessibilityWidget size={72} shape="rounded" color="#0ea5e9" />
- *   <AccessibilityWidget iconSrc="/logo-a11y.png" brandLabel="האתר שלי" />
+ *   <AccessibilityWidget iconSrc="/logo-a11y.png" />
  *   <AccessibilityWidget initialSettings={{ highlightLinks: true }} hideBranding />
  */
 
@@ -405,6 +405,7 @@ export default function AccessibilityWidget({
   const overTrashRef = useRef(false);
   const isTouchDragRef = useRef(false);
   const [hidePrompt, setHidePrompt] = useState(false);
+  const hideModalRef = useRef(null);
 
   const rootRef = useRef(null);
   const panelRef = useRef(null);
@@ -538,6 +539,30 @@ export default function AccessibilityWidget({
     document.addEventListener('mousedown', onDown);
     return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onDown); };
   }, [open, view]);
+
+  // חלון ההסתרה הצף (אחרי גרירה לפח): פוקוס פנימה, Escape סוגר, Tab נשאר בתוך החלון, והפוקוס חוזר לכפתור
+  useEffect(() => {
+    if (!hidePrompt) return;
+    const node = hideModalRef.current;
+    const focusables = () => (node ? Array.prototype.slice.call(node.querySelectorAll('button')) : []);
+    const first = focusables()[0];
+    if (first) first.focus();
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); setHidePrompt(false); return; }
+      if (e.key === 'Tab') {
+        const els = focusables(); if (!els.length) return;
+        const i = els.indexOf(document.activeElement);
+        if (i === -1) { e.preventDefault(); els[0].focus(); return; }
+        if (e.shiftKey && i === 0) { e.preventDefault(); els[els.length - 1].focus(); }
+        else if (!e.shiftKey && i === els.length - 1) { e.preventDefault(); els[0].focus(); }
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      setTimeout(() => { const t = toggleRef.current; if (t && t.isConnected && t.style.display !== 'none') t.focus(); }, 0);
+    };
+  }, [hidePrompt]);
 
   useEffect(() => { if (open && panelRef.current) panelRef.current.focus(); }, [open]);
 
@@ -808,9 +833,9 @@ export default function AccessibilityWidget({
       )}
 
       {hidePrompt && (
-        <div className="a11y-modal-overlay a11y-standalone" role="dialog" aria-modal="true" aria-label="הסתרת כפתור הנגישות">
-          <div className="a11y-modal">
-            <div className="a11y-modal-title">להסתיר את כפתור הנגישות? לכמה זמן?</div>
+        <div className="a11y-modal-overlay a11y-standalone" role="dialog" aria-modal="true" aria-labelledby="a11y-hide-title">
+          <div className="a11y-modal" ref={hideModalRef}>
+            <div className="a11y-modal-title" id="a11y-hide-title">להסתיר את כפתור הנגישות? לכמה זמן?</div>
             <button type="button" className="a11y-modal-btn" onClick={() => { hideFor(8 * 3600); setHidePrompt(false); }}>ל‑8 שעות</button>
             <button type="button" className="a11y-modal-btn" onClick={() => { hideFor(24 * 3600); setHidePrompt(false); }}>ל‑24 שעות</button>
             <button type="button" className="a11y-modal-btn danger" onClick={() => { hideFor(10 * 365 * 24 * 3600); setHidePrompt(false); }}>לצמיתות</button>

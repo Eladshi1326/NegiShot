@@ -11,17 +11,26 @@
 
 ## דרך א — סקריפט אחד (מומלץ להפצה)
 
-הוסף לאתר **שורה אחת** (לפני `</body>`). אפשר לשנות הכול דרך `data-*`:
+הוסף לאתר את ה"טוען" הבא **פעם אחת** (לפני `</body>`). הוא דואג שכל המבקרים יקבלו עדכונים **תוך יום**:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Eladshi1326/NegiShot@main/dist/accessibility-widget.js"
-        data-a11y-widget
-        data-position="bottom-right"
-        data-color="#2b50e0"
-        data-size="58"
-        data-brand-label="האתר שלי"
-        defer></script>
+<!-- ACCESSIBILITY WIDGET - START -->
+<script>
+(function () {
+  window.A11yWidgetConfig = { position: 'bottom-right', color: '#2b50e0' };
+  var v = new Date().toISOString().slice(0, 10); // משתנה כל יום
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/gh/Eladshi1326/NegiShot@main/dist/accessibility-widget.js?v=' + v;
+  s.setAttribute('data-a11y-widget', '');
+  document.body.appendChild(s);
+})();
+</script>
+<!-- ACCESSIBILITY WIDGET - END -->
 ```
+
+- צבע/מיקום/גודל: משנים בתוך `A11yWidgetConfig` (למשל `size: 64`).
+- אם באתר כבר יש בלוק ישן — **מחליפים** אותו, לא מוסיפים שני. (יש גם הגנה בקוד מטעינה כפולה.)
+- השורה הפשוטה הישנה (`<script src=".../accessibility-widget.js" data-a11y-widget ... defer>`) עדיין עובדת, אבל מבקר חוזר עלול לראות גרסה ישנה עד **7 ימים**.
 
 ה‑URL כבר מוגדר לריפו שלך (Eladshi1326/NegiShot). הקובץ כולל את React בתוכו — לא צריך שום דבר נוסף באתר.
 
@@ -37,11 +46,12 @@
 | `data-icon-src` | תמונה/לוגו לכפתור (URL) | — |
 | `data-offset` | מרחק מהקצה (px) | `20` |
 | `data-z-index` | שכבת תצוגה | `2147483000` |
-| `data-brand-label` | תווית בתחתית | `נגישות` |
-| `data-hide-branding` | `true` להסתרת התווית | `false` |
+| `data-hide-branding` | `true` להסתרת פס "נגישות בקלות" בתחתית | `false` |
 | `data-button-label` | טקסט נגיש לכפתור | `פתיחת תפריט נגישות` |
 | `data-initial` | הגדרות התחלתיות כ‑JSON, למשל `'{"highlightLinks":true}'` | — |
 | `data-auto` | `false` כדי לא להפעיל אוטומטית (תפעיל ידנית) | `true` |
+
+> כל המפתחות האלו זמינים גם בתוך `A11yWidgetConfig` בשמות camelCase (`iconColor`, `hideBranding`, `initialSettings`...). `data-brand-label` / `brandLabel` הוצאו משימוש (הפוטר תמיד "נגישות בקלות").
 
 ### עוד שתי דרכים לקונפיג (גמיש, לא חסום)
 
@@ -66,7 +76,7 @@
 ```jsx
 import AccessibilityWidget from './AccessibilityWidget';
 // פעם אחת באפליקציה:
-<AccessibilityWidget position="bottom-left" color="#e11d48" size={64} brandLabel="האתר שלי" />
+<AccessibilityWidget position="bottom-left" color="#e11d48" size={64} />
 ```
 
 ---
@@ -81,7 +91,7 @@ import AccessibilityWidget from './AccessibilityWidget';
 
 > **למה `@main` ולא `@latest`?** ב‑jsDelivr, `@latest` מצביע על ה‑**tag/release** האחרון — לא על הקומיט האחרון. כל עוד דוחפים קומיטים בלי ליצור tag, `@latest` לא מתעדכן. `@main` עוקב ישירות אחרי ה‑branch, אז כל דחיפה נספרת.
 >
-> **מטמון:** `@main` נשמר ב‑jsDelivr עד ~12 שעות. כדי לעדכן **מיידית** — "מנקים" מטמון (purge) דרך `https://purge.jsdelivr.net/gh/Eladshi1326/NegiShot@main/dist/accessibility-widget.js` (הקובץ `רענון-CDN.bat` עושה זאת בלחיצה, וכפתור ההעלאה עושה זאת אוטומטית אחרי הדחיפה).
+> **מטמון:** `@main` נשמר ב‑jsDelivr עד ~12 שעות, ו**בדפדפן של כל מבקר עד 7 ימים**. ה‑purge (`https://purge.jsdelivr.net/gh/Eladshi1326/NegiShot@main/dist/accessibility-widget.js`, דרך `רענון-CDN.bat` או אוטומטית אחרי ההעלאה) מנקה רק את ה‑CDN, לא את הדפדפנים. לכן מומלץ ה"טוען" היומי למעלה — הוא משנה את הכתובת כל יום, וכך מבקרים חוזרים מתעדכנים תוך יום. לבדיקה עצמית מיידית: גלישה בסתר.
 >
 > **אזהרה:** עדכון אוטומטי = שינוי שובר ישבור את כל האתרים בבת אחת. עבוד בזהירות ובדוק לפני שאתה דוחף.
 
@@ -110,4 +120,4 @@ embed-demo.html             ← תצוגת שיטת הסקריפט (עובד ג�
 ## תצוגה מקדימה מקומית
 לחיצה כפולה על `embed-demo.html` מציגה את שיטת הסקריפט פועלת (הקובץ הבנוי מקומי, כולל React — לא צריך אינטרנט).
 
-הערה: גודל הקובץ ~224KB (≈70KB ב‑gzip), כי React ארוז בתוכו כדי שיעבוד בכל אתר.
+הערה: גודל הקובץ ~181KB, כי React ארוז בתוכו כדי שיעבוד בכל אתר.

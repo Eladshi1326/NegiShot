@@ -15,6 +15,7 @@ If you (the AI) are asked to add this widget to a site, **do not assume styling*
 5. **Icon** — built-in accessibility icon, or a custom image (`iconSrc`)?
 6. **Footer credit** — the panel's bottom bar is a fixed credit link "נגישות בקלות" (→ `https://nrgisutbekalot.netlify.app/`). Keep it (default) or hide it (`hideBranding` / `data-hide-branding="true"`). `brandLabel` is **deprecated and ignored**.
 7. **Defaults on** — any setting ON by default for all visitors? → `initialSettings`.
+8. **Accessibility statement** — URL of the site's accessibility statement page? → `statementUrl` (adds a link at the top of the panel, and visiting that page restores a hidden widget).
 
 Then render with matching props (§3). Confirm the framework (React/Next.js/Vite/CRA) and where the global layout/App file is, so the widget mounts once, app-wide.
 
@@ -60,8 +61,8 @@ For non-React sites, or drop-in + auto-update, use the bundled script (React is 
 - The plain one-line tag still works (`<script src=".../accessibility-widget.js" data-a11y-widget data-position=… data-color=… defer></script>`), but returning visitors may see an old version for up to 7 days.
 - **Double-load guard:** `embed.jsx` sets `window.__a11yWidgetLoaded`; if the page contains both an old tag and the loader, only the first one runs. Still, replace old blocks instead of adding a second.
 - `embed.jsx` finds its own script via `document.currentScript` → `script[data-a11y-widget]` → any script whose src contains `accessibility-widget`. Config priority low→high: script tag `data-*` → `window.A11yWidgetConfig` → `AccessibilityWidget.init(options)`. It creates a `#a11y-widget-host` div, renders the component into it, and auto-inits unless `data-auto="false"`.
-- Global API: `window.AccessibilityWidget.{ init, update, unmount, getConfig }` — `update(opts)` re-renders with new props at runtime.
-- Config keys (as `A11yWidgetConfig` props or `data-*`): `position`, `color`, `iconColor`/`data-icon-color`, `size`, `shape`, `iconSrc`/`data-icon-src`, `offset`, `zIndex`/`data-z-index`, `hideBranding`/`data-hide-branding`, `buttonLabel`/`data-button-label`, `initialSettings`/`data-initial` (JSON). (`brandLabel`/`data-brand-label` is deprecated and ignored.)
+- Global API: `window.AccessibilityWidget.{ init, update, unmount, getConfig, show, hide }` — `update(opts)` re-renders with new props at runtime. `show()` clears the hide cookie and shows the button again; `hide()` hides it for the current page view only (no cookie); `hide(seconds)` hides it and persists the `a11yWidgetHidden` cookie for that many seconds (same as the menu's hide options).
+- Config keys (as `A11yWidgetConfig` props or `data-*`): `position`, `color`, `iconColor`/`data-icon-color`, `size`, `shape`, `iconSrc`/`data-icon-src`, `offset`, `zIndex`/`data-z-index`, `hideBranding`/`data-hide-branding`, `buttonLabel`/`data-button-label`, `initialSettings`/`data-initial` (JSON), `statementUrl`/`data-statement-url`, `statementLabel`/`data-statement-label`. (`brandLabel`/`data-brand-label` is deprecated and ignored.)
 - Build: `npm run build` → `build.mjs` → esbuild IIFE, minified, `NODE_ENV=production`, React bundled → `dist/accessibility-widget.js` (~181KB).
 - Publish: `העלאה-לגיט.bat` pushes to GitHub and purges the jsDelivr CDN. Full details in `README-הפצה.md`.
 - **For React projects prefer the import method above** (avoids loading a second React instance).
@@ -85,6 +86,8 @@ For non-React sites, or drop-in + auto-update, use the bundled script (React is 
 | `hideBranding` | boolean | `false` | Hide the footer credit bar "נגישות בקלות". |
 | `buttonLabel` | string | `'פתיחת תפריט נגישות'` | Button `aria-label` when closed. |
 | `initialSettings` | object | `null` | Per-site default settings; also the target of "reset". |
+| `statementUrl` | URL string | `null` | Accessibility statement page. When set: a full-width link at the top of the panel body (above the cards, in every view), and loading that page clears the hide cookie (so "go to the statement page" is a documented way to bring the button back). When not set, nothing changes. |
+| `statementLabel` | string | `'הצהרת נגישות'` | Text of the statement link. |
 
 ### Examples
 ```jsx
@@ -93,7 +96,9 @@ For non-React sites, or drop-in + auto-update, use the bundled script (React is 
 <AccessibilityWidget size={72} shape="rounded" color="#0ea5e9" iconColor="#fff" />
 <AccessibilityWidget iconSrc="/logo-a11y.png" />
 <AccessibilityWidget initialSettings={{ highlightLinks: true, fontSize: 1 }} hideBranding />
+<AccessibilityWidget statementUrl="/accessibility.html" />
 ```
+Named exports (React users): `showWidget()` and `hideWidget(seconds?)` — same behavior as the embed's `AccessibilityWidget.show()/hide()`. They work by clearing/setting the cookie and dispatching the window events `a11y-widget:show` / `a11y-widget:hide`, which the component listens to even while hidden.
 
 ---
 
@@ -153,11 +158,11 @@ const DEFAULTS = {
 | `contrast` | ניגודיות | off / **dark** (`a11y-contrast-dark`) / **light** (`a11y-contrast-light`) / **invert** (`html.style.filter: invert(1) hue-rotate(180deg)`). |
 | `grayscale` | גווני צבע | off / **grayscale** / **sepia** (`html.style.filter`). |
 
-**Toggles** — handler `toggle(key)`: `readableFont` (a11y-readable-font; lazy-loads OpenDyslexic; note: that font looks larger by design, it does NOT change the size setting), `highlightLinks`, `hideImages`, `stopAnimations`, `bigCursor`, `focusHighlight`, `readingMask` (see §8).
+**Toggles** — handler `toggle(key)`: `readableFont` (a11y-readable-font; lazy-loads OpenDyslexic from fonts.cdnfonts.com as before. OpenDyslexic has **no Hebrew glyphs**, so the font stack is `'OpenDyslexic', Arial, 'Arial Hebrew', 'Segoe UI', 'Noto Sans Hebrew', Tahoma, 'Liberation Sans', Arimo, system-ui, sans-serif`: Latin uses OpenDyslexic, Hebrew falls back per glyph to a clear local sans font, no extra network. On `:lang(he)` content it also adds mild spacing: `letter-spacing:.05em; word-spacing:.14em; font-style:normal`. The rule sits before the spacing rules and uses `:where(:lang(he))`, so a letter/word spacing level the user picked still wins. Note: that font looks larger by design, it does NOT change the size setting), `highlightLinks`, `hideImages`, `stopAnimations`, `bigCursor`, `focusHighlight`, `readingMask` (see §8).
 
 **Action:** `pageStructure` → opens the structure view (§8).
 
-**TTS:** `speak()` reads `(main||body).innerText || textContent`, `lang='he-IL'`, via `speechSynthesis`.
+**TTS:** `speak()` reads the page text via `collectText(document)`: `main` if present, else the rendered children of `body` (skipping the widget, `script/style/noscript/template` and non-rendered elements); then appends the text of every **visible same-origin iframe** inside that target, recursively (nested frames too). Cross-origin frames are skipped safely (try/catch), hidden frames (`display:none`, `visibility:hidden`, `aria-hidden="true"` ancestor, zero size) are skipped. Text is collected at click time, so frames added or navigated later are included automatically. `lang='he-IL'`, via `speechSynthesis`, max 32000 chars.
 
 ---
 
@@ -165,10 +170,10 @@ const DEFAULTS = {
 
 Header has three buttons:
 - **Reset (↺)** → sets `view='reset'` → a **confirmation popup** ("לאפס את כל הגדרות הנגישות?" → "כן, אפס הכול" / "ביטול"). Confirm calls `doReset()` (→ `baseSettings`).
-- **Eye (hide)** → sets `view='hide'` → a **popup** asking duration: 8h / 24h / permanent / cancel → `hideFor(sec)` sets cookie `a11yWidgetHidden`, hides widget (component returns `null`). Restore via **Alt+Shift+A** (`clearHideCookie()` + `setHidden(false)`), works even while hidden.
+- **Eye (hide)** → sets `view='hide'` → a **popup** asking duration: 8 שעות / 24 שעות / לצמיתות / ביטול → `hideFor(sec)` sets cookie `a11yWidgetHidden` (path=/, max-age; "permanent" asks for 10 years, Chrome caps cookies at 400 days), hides widget (component returns `null`). The popup note tells the user how to restore: with `statementUrl` "go to the site's accessibility statement page or press Alt+Shift+A", without it "press Alt+Shift+A or clear the site data in the browser". Restore paths: **Alt+Shift+A**; `AccessibilityWidget.show()` / `showWidget()`; URL parameter **`?a11y-widget=show`** (or `#a11y-widget=show`) on any page with the widget; loading the `statementUrl` page. All of them clear the cookie, and all work while hidden.
 - **Close (✕)** → closes the panel.
 
-Popups are `.a11y-modal-overlay` absolutely covering the panel (`role="dialog" aria-modal="true"`), visually separate from the menu. Esc backs out one level (popup/sub-view → main → close).
+Popups are `.a11y-modal-overlay` absolutely covering the panel (`role="dialog" aria-modal="true"`), visually separate from the menu. Opening a popup moves focus to its first button and traps Tab inside it; closing it (button or Esc) returns focus to the header button that opened it. Esc backs out one level (popup/sub-view → main → close). Entering the page structure view focuses its title; "חזרה" returns focus to the "מבנה עמוד" tile.
 
 **Footer credit bar:** the whole bottom bar is one link `<a class="a11y-foot">נגישות בקלות</a>` → `https://nrgisutbekalot.netlify.app/` (new tab), `position:sticky; bottom:0` so it is always visible, styled with the accent gradient + white text (like the header). Hidden by `hideBranding`.
 
@@ -180,7 +185,7 @@ Popups are `.a11y-modal-overlay` absolutely covering the panel (`role="dialog" a
 
 **Reading mask** (`readingMask`): `mousemove` updates `maskY`; two `position:fixed` `.a11y-mask-band` divs (`rgba(0,0,0,.6)`, `pointer-events:none`, `zIndex-1`) leave a ~140px clear strip, and the strip edges have a **bright yellow border** (`3px solid #ffd400`) for clarity.
 
-**Page structure** (`pageStructure`): `openStructure()` collects `h1–h6` (excluding widget; text via `innerText||textContent`), assigns missing ids, stores `{id,text,level}`. The list shows each item with an **`H{level}` SEO tag chip** (`.a11y-h-tag`) next to the text, indented by hierarchy; clicking → `gotoHeading(id)`: smooth-scrolls (centered), focuses, marks the heading with a **yellow highlight frame** (`.a11y-jump-highlight` — outline + ring) that **auto-clears after 15 seconds** via `setTimeout` (tracked in `jumpRef`, cleared/replaced on a new jump and on unmount). The **panel stays open** after a jump so the user can navigate to more headings.
+**Page structure** (`pageStructure`): `openStructure()` calls `collectHeadings(document)`, which walks `h1–h6` **and iframes** in document order: rendered headings with text (excluding the widget) are listed, and every visible same-origin iframe is entered recursively at its position (cross-origin frames skipped with try/catch, hidden frames skipped as for TTS). Collected at open time, so frames added/navigated later are included. Elements are kept in a ref (`headingEls`, no ids are written into the page); state holds `{i,text,level,framed}`. Activating an item scrolls the chain of parent frames into view, then the heading, focuses it inside its own frame, and injects the small highlight style (`#a11y-widget-jump-style`) into that frame's document if needed. The list shows each item with an **`H{level}` SEO tag chip** (`.a11y-h-tag`) next to the text, indented by hierarchy; clicking → `gotoHeading(id)`: smooth-scrolls (centered), focuses, marks the heading with a **yellow highlight frame** (`.a11y-jump-highlight` — outline + ring) that **auto-clears after 15 seconds** via `setTimeout` (tracked in `jumpRef`, cleared/replaced on a new jump and on unmount). The **panel stays open** after a jump so the user can navigate to more headings.
 
 **Touch devices:** under `@media (pointer: coarse)` the tiles `bigCursor`, `readingMask`, `focusHighlight` get class `a11y-no-touch` and are hidden (no mouse cursor / hover / Tab navigation on phones). Driven by `TOUCH_HIDE`.
 
@@ -237,6 +242,14 @@ Resize text (1.4.4), contrast tooling (1.4.3/1.4.6), text/word spacing (1.4.12),
 After **any** change to the component, update **both** guides: this AI guide and the human installation guide (`מדריך-התקנה.docx`). Keep the props table, examples, feature list, and DEFAULTS in sync with the code.
 
 ## 15. Changelog (latest)
+- **Accessibility statement link**: `statementUrl` / `statementLabel` (`data-statement-url` / `data-statement-label`). Link at the top of the panel; visiting that page restores a hidden widget.
+- **Contrast**: the brand color is no longer drawn raw. `accentShades(color)` derives three shades, darkening only as much as needed: `--a11y-acc-bg` (background under white text: header, footer, pressed tiles, primary/back buttons, H tags; ≥4.5:1 incl. the lighter gradient top and the hover brightness), `--a11y-acc-ic` (icons on the light tile circles, ≥3:1), `--a11y-acc-tx` (text on white, ≥4.5:1). They are set as CSS variables on `#a11y-widget-root`; `--a11y-accent` on `<html>` is still the raw color. Any CSS color works (hex, rgb, names, `var()` resolved by the browser). Gray helper texts darkened to `#5f6488`, header icon hover overlay `.30`→`.26`, drag label backdrop `.62`→`.72`. With the default `#2b50e0` the brand shade is unchanged.
+- **Focus ring**: one two-tone ring for all widget buttons and links (FAB, header, tiles, popups, structure list, statement link): `outline: 3px solid #0b0b14; outline-offset: 2px; box-shadow: 0 0 0 7px #fff` (white / dark / white bands, visible on any background). The sticky footer uses an inset version.
+- **Readable font** now useful on Hebrew pages (see §6).
+- **Hide**: restore via `AccessibilityWidget.show()`, `?a11y-widget=show`, or the statement page; popup explains how. Buttons read "8 שעות" / "24 שעות" (no dash).
+- **Frames**: page structure and read aloud include visible same-origin iframes (recursive).
+- Popups get focus management; structure view focus management; toggle's `aria-controls` only while the panel exists; level tiles' aria-label uses a comma instead of an en dash.
+- Readable font no longer overrides a letter spacing level the user picked (rule order fix).
 - Font size now scales **all** page text (DOM-walk), not just rem-based.
 - Added **word spacing** control.
 - **Contrast** now cycles: dark / light / invert. **Grayscale** now cycles: grayscale / sepia.

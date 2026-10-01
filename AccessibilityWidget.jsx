@@ -24,6 +24,10 @@
  *   hideBranding    : הסתרת פס הפוטר "נגישות בקלות".            ברירת מחדל false
  *   buttonLabel     : טקסט נגיש (aria-label) לכפתור.            ברירת מחדל 'פתיחת תפריט נגישות'
  *   initialSettings : אובייקט הגדרות התחלתיות (ברירת מחדל לאתר). ברירת מחדל null
+ *   statementUrl    : כתובת דף הצהרת הנגישות. כשמוגדר: קישור בולט בראש הפאנל וכניסה לדף הזה מחזירה כפתור שהוסתר. ברירת מחדל null
+ *   statementLabel  : הטקסט של הקישור.                          ברירת מחדל 'הצהרת נגישות'
+ *
+ * החזרה והסתרה מבחוץ: showWidget() / hideWidget(שניות) (ייצוא בשם) או ?a11y-widget=show בכתובת הדף.
  *
  * דוגמאות:
  *   <AccessibilityWidget />
@@ -75,6 +79,178 @@ function clearHideCookie() {
   document.cookie = HIDE_COOKIE + '=; path=/; max-age=0; SameSite=Lax';
 }
 
+// ---------- החזרה והסתרה מבחוץ (API גלובלי, פרמטר בכתובת) ----------
+// אירועים שהקומפוננטה מאזינה להם גם כשהיא מוסתרת
+const EV_SHOW = 'a11y-widget:show';
+const EV_HIDE = 'a11y-widget:hide';
+// מחזיר את הכפתור: מוחק את עוגיית ההסתרה ומודיע לקומפוננטה
+export function showWidget() {
+  if (typeof window === 'undefined') return;
+  clearHideCookie();
+  try { window.dispatchEvent(new CustomEvent(EV_SHOW)); } catch (e) { /* */ }
+}
+// מסתיר את הכפתור. בלי שניות: רק עד טעינת הדף הבאה. עם שניות: נשמר בעוגייה כמו בתפריט
+export function hideWidget(seconds) {
+  if (typeof window === 'undefined') return;
+  const sec = Number(seconds);
+  if (sec > 0) setHideCookie(Math.round(sec));
+  try { window.dispatchEvent(new CustomEvent(EV_HIDE)); } catch (e) { /* */ }
+}
+// ?a11y-widget=show (או #a11y-widget=show) בכתובת מחזיר את הכפתור
+function urlAsksShow() {
+  try {
+    const re = /(?:^|[?&#])a11y-widget=show(?:&|$)/;
+    return re.test(window.location.search || '') || re.test(window.location.hash || '');
+  } catch (e) { return false; }
+}
+// האם הדף הנוכחי הוא דף הצהרת הנגישות (משווים נתיב בלי סיומת .html או index)
+function isStatementPage(url) {
+  if (!url) return false;
+  try {
+    const norm = (p) => p.replace(/\/index\.html?$/i, '/').replace(/\.html?$/i, '').replace(/\/+$/, '') || '/';
+    const u = new URL(url, window.location.href);
+    return u.origin === window.location.origin && norm(u.pathname) === norm(window.location.pathname);
+  } catch (e) { return false; }
+}
+
+// ---------- צבעים וניגודיות ----------
+// מפרק צבע ל [r,g,b]. hex ו rgb ישירות, כל השאר (שם צבע, var) דרך הדפדפן
+function parseColor(str) {
+  const s = String(str || '').trim();
+  let m = /^#([0-9a-f]{3,8})$/i.exec(s);
+  if (m) {
+    let h = m[1];
+    if (h.length === 3 || h.length === 4) h = h.split('').map((c) => c + c).join('');
+    if (h.length === 6 || h.length === 8) return [0, 2, 4].map((i) => parseInt(h.substr(i, 2), 16));
+    return null;
+  }
+  m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(s);
+  if (m) return [+m[1], +m[2], +m[3]];
+  if (typeof document === 'undefined' || !document.documentElement) return null;
+  try {
+    const el = document.createElement('span');
+    el.style.color = s;
+    if (!el.style.color) return null;
+    el.style.display = 'none';
+    document.documentElement.appendChild(el);
+    const cs = window.getComputedStyle(el).color;
+    el.parentNode.removeChild(el);
+    m = /rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(cs || '');
+    return m ? [+m[1], +m[2], +m[3]] : null;
+  } catch (e) { return null; }
+}
+const lumCh = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+const luminance = (c) => 0.2126 * lumCh(c[0]) + 0.7152 * lumCh(c[1]) + 0.0722 * lumCh(c[2]);
+function contrastRatio(a, b) {
+  const x = luminance(a), y = luminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+const mixRgb = (a, b, t) => a.map((v, i) => v * (1 - t) + b[i] * t);
+const brighten = (c, k) => c.map((v) => Math.min(255, v * k));
+const toHex = (c) => '#' + c.map((v) => ('0' + Math.round(Math.max(0, Math.min(255, v))).toString(16)).slice(-2)).join('');
+const WHITE = [255, 255, 255], BLACK = [0, 0, 0];
+// מכהה את הצבע בצעדים קטנים עד שהבדיקה עוברת (או עד שחור)
+function darkenUntil(c, ok) {
+  for (let t = 0; t <= 1.0001; t += 0.02) {
+    const x = mixRgb(c, BLACK, t);
+    if (ok(x)) return x;
+  }
+  return BLACK;
+}
+// שלושה גוונים של צבע המותג, כל אחד עובר ניגודיות במקום שבו הוא מצויר:
+// bg = רקע לטקסט לבן (כותרת, פוטר, אריח לחוץ), ic = אייקון על רקע בהיר, tx = טקסט על רקע לבן
+const TILE_IC_BG = mixRgb([233, 235, 248], [43, 80, 224], 0.10);   // רקע עיגול האייקון במצב ריחוף (הבהיר ביותר)
+function accentShades(color) {
+  const c = parseColor(color);
+  if (!c) return null;
+  const bg = darkenUntil(c, (x) => {
+    const top = mixRgb(x, WHITE, 0.10);                               // החלק הבהיר של המעבר בכותרת ובפוטר
+    return contrastRatio(WHITE, brighten(top, 1.07)) >= 4.6           // טקסט לבן, גם בריחוף (brightness 1.07)
+      && contrastRatio(mixRgb(x, WHITE, 0.85), x) >= 4.6              // תת כותרת של אריח לחוץ (שקיפות .85)
+      && contrastRatio(WHITE, mixRgb(x, WHITE, 0.25)) >= 3.1          // אייקון לבן באריח לחוץ
+      && contrastRatio(WHITE, mixRgb(top, WHITE, 0.26)) >= 3.1;       // אייקון בכפתורי הכותרת בריחוף
+  });
+  const ic = darkenUntil(c, (x) => contrastRatio(x, TILE_IC_BG) >= 3.1);
+  const tx = darkenUntil(c, (x) => contrastRatio(x, [243, 244, 251]) >= 4.6);
+  return { bg: toHex(bg), ic: toHex(ic), tx: toHex(tx) };
+}
+
+// ---------- מסגרות (iframe) מאותו מקור ----------
+// המסמך שבתוך המסגרת או null אם היא ממקור אחר או עוד לא נטענה
+function frameDoc(f) {
+  try { const d = f.contentDocument; return d && d.documentElement ? d : null; } catch (e) { return null; }
+}
+// אלמנט שמוצג בפועל (לא display:none, לא visibility:hidden)
+function isRendered(el) {
+  try {
+    if (!el.getClientRects().length) return false;
+    const w = el.ownerDocument.defaultView;
+    return !w || w.getComputedStyle(el).visibility !== 'hidden';
+  } catch (e) { return false; }
+}
+// מסגרת שהמשתמש רואה: מוצגת, בגודל אמיתי ולא מוסתרת מקוראי מסך
+function frameVisible(f) {
+  try {
+    if (!isRendered(f) || f.closest('[aria-hidden="true"]')) return false;
+    const r = f.getBoundingClientRect();
+    return r.width > 2 && r.height > 2;
+  } catch (e) { return false; }
+}
+const inWidget = (el) => !!(el.closest && el.closest('#a11y-widget-root, #a11y-widget-host'));
+const elText = (el) => (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+// כל הכותרות בסדר הופעתן, כולל מתוך מסגרות מאותו מקור (גם מקוננות)
+function collectHeadings(doc, out, depth) {
+  if (!doc || depth > 6) return out;
+  let nodes;
+  try { nodes = doc.querySelectorAll('h1,h2,h3,h4,h5,h6,iframe,frame'); } catch (e) { return out; }
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    if (inWidget(n)) continue;
+    const tag = n.tagName;
+    if (tag === 'IFRAME' || tag === 'FRAME') {
+      if (frameVisible(n)) collectHeadings(frameDoc(n), out, depth + 1);
+      continue;
+    }
+    const t = elText(n);
+    if (t && isRendered(n)) out.push({ el: n, text: t.slice(0, 70), level: parseInt(tag.charAt(1), 10), framed: depth > 0 });
+  }
+  return out;
+}
+// הטקסט להקראה: main או body של המסמך (בלי הווידג'ט וסקריפטים) ואחריו הטקסט של המסגרות שבתוכו
+function collectText(doc, depth) {
+  if (!doc || depth > 6) return '';
+  const target = doc.querySelector('main') || doc.body;
+  if (!target) return '';
+  let text = '';
+  if (target === doc.body) {
+    const kids = target.children;
+    for (let i = 0; i < kids.length; i++) {
+      const k = kids[i];
+      if (inWidget(k) || k.id === 'a11y-widget-host' || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/.test(k.tagName) || !isRendered(k)) continue;
+      text += ' ' + (k.innerText || '');
+    }
+  } else {
+    text = target.innerText || target.textContent || '';
+  }
+  let frames = [];
+  try { frames = target.querySelectorAll('iframe,frame'); } catch (e) { /* */ }
+  for (let i = 0; i < frames.length; i++) {
+    if (inWidget(frames[i]) || !frameVisible(frames[i])) continue;
+    text += ' ' + collectText(frameDoc(frames[i]), depth + 1);
+  }
+  return text;
+}
+// מוסיף למסמך של מסגרת את סגנון ההדגשה של "קפיצה לכותרת" (אם אין שם את הסגנון של הווידג'ט)
+function ensureJumpStyle(doc) {
+  try {
+    if (!doc || doc === document || doc.getElementById('a11y-widget-jump-style')) return;
+    const s = doc.createElement('style');
+    s.id = 'a11y-widget-jump-style';
+    s.textContent = JUMP_CSS;
+    (doc.head || doc.documentElement).appendChild(s);
+  } catch (e) { /* */ }
+}
+
 // ---------- עוזרי class ----------
 function setLevelClass(html, prefix, level, max) {
   for (let i = 1; i <= max; i++) html.classList.remove(prefix + '-' + i);
@@ -124,6 +300,9 @@ function clearFontScale() {
 
 const EX = ':not(#a11y-widget-root):not(#a11y-widget-root *)';
 
+// הדגשת הכותרת שאליה קופצים ממבנה העמוד (משותף לדף ולמסגרות)
+const JUMP_CSS = '.a11y-jump-highlight { outline: 3px solid #ffd400 !important; outline-offset: 3px !important; box-shadow: 0 0 0 5px rgba(255,212,0,.35) !important; border-radius: 3px !important; scroll-margin-top: 24px; scroll-margin-bottom: 24px; }';
+
 // סמן עכבר גדול (חץ) + יד גדולה לקליקבילים
 const CUR_ARROW = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M8 4 L8 32 L15 25 L19.5 35 L24 33 L19.5 23 L29 23 Z' fill='black' stroke='white' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E";
 const CUR_HAND = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M16 4 c-1.7 0-3 1.3-3 3 v13 l-4-3 c-1.4-1-3.2 .1-3.2 1.8 0 .6 .2 1.1 .6 1.5 l7 8 c1 1.2 2.5 1.9 4.1 1.9 h7 c2.2 0 4-1.8 4-4 v-9 c0-1.3-1-2.4-2.4-2.4-.4 0-.8 .1-1.1 .3 -.2-1.1-1.2-1.9-2.3-1.9-.5 0-1 .2-1.4 .4 -.4-.8-1.2-1.4-2.2-1.4-.4 0-.8 .1-1.1 .3 V7 c0-1.7-1.3-3-3-3z' fill='black' stroke='white' stroke-width='1.6' stroke-linejoin='round'/%3E%3C/svg%3E";
@@ -137,6 +316,17 @@ html.a11y-zoom-1 body > *:not(#a11y-widget-host):not(#a11y-widget-root):not(scri
 html.a11y-zoom-2 body > *:not(#a11y-widget-host):not(#a11y-widget-root):not(script):not(style):not([data-a11y-widget-mount]) { zoom: 1.5; }
 html.a11y-zoom-3 body > *:not(#a11y-widget-host):not(#a11y-widget-root):not(script):not(style):not([data-a11y-widget-mount]) { zoom: 1.75; }
 html.a11y-zoom-4 body > *:not(#a11y-widget-host):not(#a11y-widget-root):not(script):not(style):not([data-a11y-widget-mount]) { zoom: 2; }
+
+/* גופן קריא: OpenDyslexic לאותיות לטיניות. אין בו עברית ולכן אותיות עבריות עוברות לגופן
+   מערכת ברור (בלי רשת). בדף בעברית נוסף גם ריווח מתון בין אותיות ומילים.
+   יושב לפני כללי הריווח כדי שרמת ריווח שהמשתמש בחר תגבר עליו */
+html.a11y-readable-font body *${EX} {
+  font-family: 'OpenDyslexic', Arial, 'Arial Hebrew', 'Segoe UI', 'Noto Sans Hebrew', Tahoma, 'Liberation Sans', Arimo, system-ui, sans-serif !important;
+  letter-spacing: .03em !important;
+}
+html.a11y-readable-font body :where(:lang(he))${EX} {
+  letter-spacing: .05em !important; word-spacing: .14em !important; font-style: normal !important;
+}
 
 html.a11y-lh-1 body *${EX} { line-height: 1.6 !important; }
 html.a11y-lh-2 body *${EX} { line-height: 1.9 !important; }
@@ -154,11 +344,6 @@ html.a11y-align-right   :is(p,li,h1,h2,h3,h4,h5,h6,blockquote,dd,dt,figcaption,t
 html.a11y-align-center  :is(p,li,h1,h2,h3,h4,h5,h6,blockquote,dd,dt,figcaption,td,th,label)${EX} { text-align: center !important; }
 html.a11y-align-left    :is(p,li,h1,h2,h3,h4,h5,h6,blockquote,dd,dt,figcaption,td,th,label)${EX} { text-align: left !important; }
 html.a11y-align-justify :is(p,li,blockquote,dd,figcaption,td)${EX} { text-align: justify !important; }
-
-html.a11y-readable-font body *${EX} {
-  font-family: 'OpenDyslexic', Tahoma, Arial, 'Segoe UI', sans-serif !important;
-  letter-spacing: .03em !important;
-}
 
 html.a11y-highlight-links a:not(#a11y-widget-root a),
 html.a11y-highlight-links a:not(#a11y-widget-root a) * {
@@ -204,44 +389,40 @@ html.a11y-focus-highlight :is(a,button,input,textarea,select,[tabindex]):focus:n
 #a11y-widget-root *, #a11y-widget-root *::before, #a11y-widget-root *::after { box-sizing: border-box; font-family: Arial, 'Segoe UI', Tahoma, sans-serif; }
 #a11y-widget-toggle { border: none; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(0,0,0,.32); cursor: pointer; padding: 0; transition: transform .15s ease, box-shadow .15s ease; touch-action: none; user-select: none; -webkit-user-select: none; }
 #a11y-widget-toggle:hover { transform: scale(1.07); }
-#a11y-widget-toggle:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 #a11y-widget-toggle img { display: block; }
 
 #a11y-panel { width: 340px; max-width: calc(100vw - 28px); overflow-y: auto; background: #eceefb; border-radius: 18px; box-shadow: 0 14px 40px rgba(20,20,60,.30); border: 1px solid #d9ddf5; padding: 0; direction: rtl; }
 #a11y-panel:focus { outline: none; }
 
-.a11y-head { position: sticky; top: 0; z-index: 2; background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.12)), var(--a11y-accent, #2b50e0); color: #fff; padding: 14px 16px; border-radius: 18px 18px 0 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.a11y-head { position: sticky; top: 0; z-index: 2; background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.12)), var(--a11y-acc-bg, var(--a11y-accent, #2b50e0)); color: #fff; padding: 14px 16px; border-radius: 18px 18px 0 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .a11y-head-title { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 800; }
 .a11y-head-title .a11y-badge { width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,.22); display: flex; align-items: center; justify-content: center; }
 .a11y-head-actions { display: flex; align-items: center; gap: 6px; }
 .a11y-ico-btn { width: 34px; height: 34px; border-radius: 9px; border: none; cursor: pointer; background: rgba(255,255,255,.16); color: #fff; display: flex; align-items: center; justify-content: center; }
-.a11y-ico-btn:hover { background: rgba(255,255,255,.30); }
-.a11y-ico-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.a11y-ico-btn:hover { background: rgba(255,255,255,.26); }
 
 .a11y-body { padding: 12px; }
 .a11y-card { background: #fff; border-radius: 16px; padding: 12px 12px 14px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(20,20,60,.05); }
-.a11y-card-title { font-size: 12px; font-weight: 800; color: #8a8fb0; margin: 2px 4px 10px; }
+.a11y-card-title { font-size: 12px; font-weight: 800; color: #5f6488; margin: 2px 4px 10px; }
 .a11y-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 
 .a11y-tile { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #f3f4fb; border: 2px solid transparent; border-radius: 12px; padding: 11px 12px; min-height: 62px; cursor: pointer; text-align: right; color: #1c2030; }
 .a11y-tile:hover { background: #e9ebf8; }
-.a11y-tile:focus-visible { outline: 3px solid var(--a11y-accent, #2b50e0); outline-offset: 2px; }
-.a11y-tile[aria-pressed="true"] { background: var(--a11y-accent, #2b50e0); color: #fff; border-color: var(--a11y-accent, #2b50e0); }
+.a11y-tile[aria-pressed="true"] { background: var(--a11y-acc-bg, var(--a11y-accent, #2b50e0)); color: #fff; border-color: var(--a11y-acc-bg, var(--a11y-accent, #2b50e0)); }
 .a11y-tile-main { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; flex: 1; min-width: 0; }
 .a11y-tile-label { font-size: 13.5px; font-weight: 700; line-height: 1.2; }
 .a11y-tile-sub { font-size: 11px; opacity: .85; }
-.a11y-tile-ic { flex: none; width: 38px; height: 38px; border-radius: 50%; background: rgba(43,80,224,.10); color: var(--a11y-accent, #2b50e0); display: flex; align-items: center; justify-content: center; }
+.a11y-tile-ic { flex: none; width: 38px; height: 38px; border-radius: 50%; background: rgba(43,80,224,.10); color: var(--a11y-acc-ic, var(--a11y-accent, #2b50e0)); display: flex; align-items: center; justify-content: center; }
 .a11y-tile[aria-pressed="true"] .a11y-tile-ic { background: rgba(255,255,255,.25); color: #fff; }
 .a11y-bars { display: flex; gap: 3px; }
 .a11y-bars i { width: 7px; height: 13px; border-radius: 2px; background: rgba(0,0,0,.14); display: block; }
-.a11y-bars i.on { background: var(--a11y-accent, #2b50e0); }
+.a11y-bars i.on { background: var(--a11y-acc-bg, var(--a11y-accent, #2b50e0)); }
 .a11y-tile[aria-pressed="true"] .a11y-bars i { background: rgba(255,255,255,.40); }
 .a11y-tile[aria-pressed="true"] .a11y-bars i.on { background: #fff; }
 
 .a11y-tts { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; background: #f3f4fb; border: 2px solid transparent; border-radius: 12px; padding: 13px; font-size: 14px; font-weight: 800; color: #1c2030; cursor: pointer; }
 .a11y-tts:hover { background: #e9ebf8; }
-.a11y-tts[aria-pressed="true"] { background: var(--a11y-accent, #2b50e0); color: #fff; border-color: var(--a11y-accent, #2b50e0); }
-.a11y-tts:focus-visible { outline: 3px solid var(--a11y-accent, #2b50e0); outline-offset: 2px; }
+.a11y-tts[aria-pressed="true"] { background: var(--a11y-acc-bg, var(--a11y-accent, #2b50e0)); color: #fff; border-color: var(--a11y-acc-bg, var(--a11y-accent, #2b50e0)); }
 
 /* פופאפ מודאלי (הסתרה / אישור איפוס) */
 .a11y-modal-overlay { position: absolute; inset: 0; background: rgba(20,20,50,.55); border-radius: 18px; display: flex; align-items: center; justify-content: center; z-index: 5; padding: 16px; }
@@ -249,26 +430,34 @@ html.a11y-focus-highlight :is(a,button,input,textarea,select,[tabindex]):focus:n
 .a11y-modal-title { font-size: 16px; font-weight: 800; color: #1c2030; margin: 2px 2px 14px; text-align: center; }
 .a11y-modal-btn { width: 100%; text-align: center; background: #f3f4fb; border: 2px solid transparent; border-radius: 12px; padding: 13px; margin-bottom: 9px; font-size: 14px; font-weight: 700; color: #1c2030; cursor: pointer; }
 .a11y-modal-btn:hover { background: #e9ebf8; }
-.a11y-modal-btn:focus-visible { outline: 3px solid var(--a11y-accent, #2b50e0); outline-offset: 2px; }
-.a11y-modal-btn.primary { background: var(--a11y-accent, #2b50e0); color: #fff; }
+.a11y-modal-btn.primary { background: var(--a11y-acc-bg, var(--a11y-accent, #2b50e0)); color: #fff; }
 .a11y-modal-btn.danger { color: #b42318; }
 .a11y-modal-btn.cancel { background: transparent; color: #6b7090; }
-.a11y-modal-note { text-align: center; font-size: 11px; color: #9aa0c0; margin-top: 6px; }
+.a11y-modal-note { text-align: center; font-size: 12px; line-height: 1.45; color: #5f6488; margin-top: 6px; }
 
 .a11y-struct-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: right; background: #f7f8fc; border: none; border-radius: 9px; padding: 10px 12px; margin-bottom: 6px; cursor: pointer; color: #1c2030; font-size: 13.5px; }
 .a11y-struct-item:hover { background: #e9ebf8; }
-.a11y-struct-item:focus-visible { outline: 2px solid var(--a11y-accent, #2b50e0); }
-.a11y-h-tag { flex: none; font-size: 10px; font-weight: 800; color: #fff; background: var(--a11y-accent, #2b50e0); border-radius: 5px; padding: 2px 6px; min-width: 26px; text-align: center; }
-.a11y-struct-empty { color: #8a8fb0; font-size: 13px; padding: 8px 4px; }
+.a11y-h-tag { flex: none; font-size: 10px; font-weight: 800; color: #fff; background: var(--a11y-acc-bg, var(--a11y-accent, #2b50e0)); border-radius: 5px; padding: 2px 6px; min-width: 26px; text-align: center; }
+.a11y-struct-empty { color: #5f6488; font-size: 13px; padding: 8px 4px; }
 .a11y-menu-title { font-size: 15px; font-weight: 800; color: #1c2030; margin: 4px 4px 12px; }
-.a11y-menu-cancel { width: 100%; text-align: center; background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.12)), var(--a11y-accent, #2b50e0); border: none; color: #fff; font-weight: 800; padding: 13px; cursor: pointer; border-radius: 12px; }
+.a11y-menu-cancel { width: 100%; text-align: center; background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.12)), var(--a11y-acc-bg, var(--a11y-accent, #2b50e0)); border: none; color: #fff; font-weight: 800; padding: 13px; cursor: pointer; border-radius: 12px; }
 .a11y-menu-cancel:hover { filter: brightness(1.07); }
 
-.a11y-foot { position: sticky; bottom: 0; z-index: 2; display: block; text-align: center; font-size: 12px; font-weight: 800; text-decoration: none; background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.12)), var(--a11y-accent, #2b50e0); color: #fff; padding: 12px; border-radius: 0 0 18px 18px; cursor: pointer; transition: filter .12s ease; }
+.a11y-foot { position: sticky; bottom: 0; z-index: 2; display: block; text-align: center; font-size: 12px; font-weight: 800; text-decoration: none; background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.12)), var(--a11y-acc-bg, var(--a11y-accent, #2b50e0)); color: #fff; padding: 12px; border-radius: 0 0 18px 18px; cursor: pointer; transition: filter .12s ease; }
 .a11y-foot:hover { filter: brightness(1.07); text-decoration: underline; }
-.a11y-foot:focus-visible { outline: 3px solid #fff; outline-offset: -3px; }
 .a11y-mask-band { position: fixed; left: 0; right: 0; background: rgba(0,0,0,.6); pointer-events: none; }
-.a11y-jump-highlight { outline: 3px solid #ffd400 !important; outline-offset: 3px !important; box-shadow: 0 0 0 5px rgba(255,212,0,.35) !important; border-radius: 3px !important; scroll-margin-top: 24px; scroll-margin-bottom: 24px; }
+${JUMP_CSS}
+
+/* טבעת מיקוד דו גונית: קו כהה עם הילה לבנה משני צדדיו, נראית על רקע בהיר וגם כהה */
+#a11y-widget-root :is(button, a):focus-visible { outline: 3px solid #0b0b14 !important; outline-offset: 2px !important; box-shadow: 0 0 0 7px #fff !important; }
+#a11y-widget-root .a11y-struct-item:focus-visible { position: relative; z-index: 1; }
+/* פס הפוטר צמוד לשולי הפאנל, לכן הטבעת שלו פנימית */
+#a11y-widget-root .a11y-foot:focus-visible { outline: 3px solid #fff !important; outline-offset: -5px !important; box-shadow: inset 0 0 0 7px #0b0b14 !important; }
+
+/* קישור להצהרת הנגישות (רק כשהוגדר statementUrl) */
+.a11y-statement { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; background: #fff; border: 2px solid transparent; border-radius: 12px; padding: 11px 12px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(20,20,60,.05); color: var(--a11y-acc-tx, #2b50e0); font-size: 14px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.a11y-statement:hover { background: #f3f4fb; }
+.a11y-statement svg { flex: none; }
 
 /* הסתרת כלים שלא רלוונטיים למסך מגע (סמן גדול, מסכת קריאה, מסגרת מיקוד) */
 @media (pointer: coarse) { .a11y-no-touch { display: none !important; } }
@@ -277,11 +466,11 @@ html.a11y-focus-highlight :is(a,button,input,textarea,select,[tabindex]):focus:n
 .a11y-drop-circle { width: 48px; height: 48px; border-radius: 50%; background: rgba(22,24,44,.42); border: 2px dashed rgba(255,255,255,.78); display: flex; align-items: center; justify-content: center; color: #fff; transition: transform .12s ease, background .12s ease, border-color .12s ease; }
 .a11y-drop-circle svg { width: 21px; height: 21px; fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; }
 .a11y-drop.over .a11y-drop-circle { background: rgba(214,40,40,.92); border-color: #fff; border-style: solid; transform: scale(1.16); }
-.a11y-drop-label { font-size: 11px; font-weight: 700; color: #fff; background: rgba(22,24,44,.62); padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.a11y-drop-label { font-size: 11px; font-weight: 700; color: #fff; background: rgba(22,24,44,.72); padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
 @keyframes a11yDropIn { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%); } }
 .a11y-modal-overlay.a11y-standalone { position: fixed; inset: 0; border-radius: 0; z-index: 100; }
 .a11y-modal-overlay.a11y-standalone .a11y-modal { max-width: 340px; }
-.a11y-standalone .a11y-modal-btn.cancel { background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.12)), var(--a11y-accent, #2b50e0); color: #fff; font-weight: 800; }
+.a11y-standalone .a11y-modal-btn.cancel { background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(0,0,0,.12)), var(--a11y-acc-bg, var(--a11y-accent, #2b50e0)); color: #fff; font-weight: 800; }
 .a11y-standalone .a11y-modal-btn.cancel:hover { filter: brightness(1.07); }
 
 /* ===== מובייל ===== */
@@ -335,6 +524,7 @@ const ICONS = {
   focus: svg(<><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" /><circle cx="12" cy="12" r="2.5" /></>),
   cursor: svg(<><path d="M6 3l14 7-6 2-2 6z" fill="currentColor" stroke="none" /></>),
   structure: svg(<><rect x="3" y="4" width="7" height="7" rx="1.5" /><rect x="14" y="4" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="6" rx="1.5" /><rect x="14" y="14" width="7" height="6" rx="1.5" /></>),
+  doc: svg(<><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></>),
   speaker: svg(<><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor" stroke="none" /><path d="M16 8a5 5 0 0 1 0 8" /></>),
 };
 
@@ -385,6 +575,8 @@ export default function AccessibilityWidget({
   hideBranding = false,
   buttonLabel = 'פתיחת תפריט נגישות',
   initialSettings = null,
+  statementUrl = null,
+  statementLabel = 'הצהרת נגישות',
 } = {}) {
   const baseSettings = useMemo(() => ({ ...DEFAULTS, ...(initialSettings || {}) }), [initialSettings]);
 
@@ -411,6 +603,14 @@ export default function AccessibilityWidget({
   const panelRef = useRef(null);
   const toggleRef = useRef(null);
   const jumpRef = useRef({ el: null, timer: null });
+  const headingEls = useRef([]);          // הכותרות שנאספו (גם מתוך מסגרות), לפי אינדקס
+  const modalRef = useRef(null);          // הפופאפ הפתוח בתוך הפאנל (הסתרה / איפוס)
+  const openerRef = useRef(null);         // הכפתור שפתח את הפופאפ, לשם חוזר הפוקוס
+  const structTitleRef = useRef(null);
+  const prevViewRef = useRef('main');
+
+  // גוונים של צבע המותג שעוברים ניגודיות (מחושב פעם אחת לכל צבע)
+  const shades = useMemo(() => accentShades(color), [color]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -425,6 +625,8 @@ export default function AccessibilityWidget({
   useEffect(() => {
     if (typeof window === 'undefined') return;
     document.documentElement.style.setProperty('--a11y-accent', color);
+    // ?a11y-widget=show בכתובת או כניסה לדף הצהרת הנגישות מחזירים כפתור שהוסתר
+    if (hasHideCookie() && (urlAsksShow() || isStatementPage(statementUrl))) clearHideCookie();
     setHidden(hasHideCookie());
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
@@ -486,6 +688,16 @@ export default function AccessibilityWidget({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // API גלובלי: AccessibilityWidget.show() / hide() שולחים אירועים לכאן (עובד גם כשהכפתור מוסתר)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onShow = () => { clearHideCookie(); setHidden(false); };
+    const onHide = () => { setOpen(false); setView('main'); setHidePrompt(false); setHidden(true); };
+    window.addEventListener(EV_SHOW, onShow);
+    window.addEventListener(EV_HIDE, onHide);
+    return () => { window.removeEventListener(EV_SHOW, onShow); window.removeEventListener(EV_HIDE, onHide); };
   }, []);
 
   // החזרה למיקום ברירת המחדל במעבר מובייל<->דסקטופ; ושמירה שהכפתור לא ייעלם מחוץ למסך
@@ -566,6 +778,40 @@ export default function AccessibilityWidget({
 
   useEffect(() => { if (open && panelRef.current) panelRef.current.focus(); }, [open]);
 
+  // פופאפ בתוך הפאנל (הסתרה / איפוס): פוקוס פנימה, Tab נשאר בתוכו ובסגירה הפוקוס חוזר לכפתור שפתח אותו
+  useEffect(() => {
+    if (!open || (view !== 'hide' && view !== 'reset')) return;
+    const node = modalRef.current;
+    const focusables = () => (node ? Array.prototype.slice.call(node.querySelectorAll('button, a[href]')) : []);
+    const first = focusables()[0];
+    if (first) first.focus();
+    const onKey = (e) => {
+      if (e.key !== 'Tab') return;
+      const els = focusables(); if (!els.length) return;
+      const i = els.indexOf(document.activeElement);
+      if (i === -1) { e.preventDefault(); els[0].focus(); return; }
+      if (e.shiftKey && i === 0) { e.preventDefault(); els[els.length - 1].focus(); }
+      else if (!e.shiftKey && i === els.length - 1) { e.preventDefault(); els[0].focus(); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      setTimeout(() => { const o = openerRef.current; if (o && o.isConnected) o.focus(); }, 0);
+    };
+  }, [open, view]);
+
+  // מבנה עמוד: פוקוס לכותרת הרשימה בכניסה ובחזרה פוקוס לאריח "מבנה עמוד"
+  useEffect(() => {
+    const prev = prevViewRef.current;
+    prevViewRef.current = view;
+    if (!open) return;
+    if (view === 'structure' && structTitleRef.current) structTitleRef.current.focus();
+    else if (view === 'main' && prev === 'structure' && panelRef.current) {
+      const t = panelRef.current.querySelector('[data-a11y-key="pageStructure"]');
+      if (t) t.focus();
+    }
+  }, [view, open]);
+
   // ---------- גרירת הכפתור (עכבר + מגע) ----------
   const onDragPointerDown = useCallback((e) => {
     if (!toggleRef.current) return;
@@ -623,8 +869,8 @@ export default function AccessibilityWidget({
   const speak = useCallback(() => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) { alert('הדפדפן אינו תומך בהקראת טקסט.'); return; }
     if (speaking) { stopSpeak(); return; }
-    const target = document.querySelector('main') || document.body;
-    const text = ((target && (target.innerText || target.textContent)) || '').replace(/\s+/g, ' ').trim().slice(0, 32000);
+    // main או body של הדף וגם הטקסט שבתוך מסגרות מאותו מקור שמוצגות בו
+    const text = (collectText(document, 0) || '').replace(/\s+/g, ' ').trim().slice(0, 32000);
     if (!text) return;
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
@@ -639,16 +885,20 @@ export default function AccessibilityWidget({
   const hideFor = useCallback((sec) => { setHideCookie(sec); setHidden(true); setOpen(false); setView('main'); }, []);
 
   const openStructure = useCallback(() => {
-    const htext = (h) => (h.innerText || h.textContent || '').trim();
-    const hs = Array.prototype.slice.call(document.querySelectorAll('h1,h2,h3,h4,h5,h6'))
-      .filter((h) => !h.closest('#a11y-widget-root') && htext(h))
-      .map((h, i) => { if (!h.id) h.id = 'a11y-h-' + i; return { id: h.id, text: htext(h).slice(0, 70), level: parseInt(h.tagName.charAt(1), 10) }; });
-    setHeadings(hs);
+    // כותרות מהדף ומכל מסגרת מאותו מקור שמוצגת בו, בסדר הופעתן
+    const found = collectHeadings(document, [], 0);
+    headingEls.current = found.map((h) => h.el);
+    setHeadings(found.map((h, i) => ({ i, text: h.text, level: h.level, framed: h.framed })));
     setView('structure');
   }, []);
-  const gotoHeading = useCallback((id) => {
-    const el = document.getElementById(id);
-    if (el) {
+  const gotoHeading = useCallback((i) => {
+    const el = headingEls.current[i];
+    if (el && el.isConnected) {
+      // כותרת בתוך מסגרת: קודם מגלגלים את המסגרות שמסביב לתצוגה
+      const chain = [];
+      try { let w = el.ownerDocument.defaultView; while (w && w !== window && w.frameElement) { chain.unshift(w.frameElement); w = w.parent; } } catch (e) { /* */ }
+      chain.forEach((f) => { try { f.scrollIntoView({ block: 'nearest' }); } catch (e) { /* */ } });
+      ensureJumpStyle(el.ownerDocument);
       if (el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       el.setAttribute('tabindex', '-1');
       try { el.focus({ preventScroll: true }); } catch (e) { try { el.focus(); } catch (e2) { /* */ } }
@@ -697,6 +947,8 @@ export default function AccessibilityWidget({
       width: size + 'px', height: size + 'px', zIndex,
     };
   }
+  // צבעי המותג אחרי תיקון ניגודיות, כמשתנים על שורש הווידג'ט
+  if (shades) { containerStyle['--a11y-acc-bg'] = shades.bg; containerStyle['--a11y-acc-ic'] = shades.ic; containerStyle['--a11y-acc-tx'] = shades.tx; }
   const toggleStyle = { width: size + 'px', height: size + 'px', borderRadius: radius, background: color, color: iconColor };
   const panelStyle = {
     position: 'absolute',
@@ -723,11 +975,11 @@ export default function AccessibilityWidget({
     const onClick = t.type === 'toggle' ? () => toggle(t.key)
       : t.type === 'action' ? openStructure
       : () => cycle(t.key, t.max);
-    const ariaLabel = t.type === 'level' ? t.label + ' – רמה ' + val + ' מתוך ' + t.max
+    const ariaLabel = t.type === 'level' ? t.label + ', רמה ' + val + ' מתוך ' + t.max
       : t.type === 'cycle' ? t.label + ' ' + (names[val] || 'כבוי') : t.label;
 
     return (
-      <button key={t.key} type="button" className={'a11y-tile' + (TOUCH_HIDE[t.key] ? ' a11y-no-touch' : '')} aria-pressed={t.type === 'action' ? undefined : pressed} aria-label={ariaLabel} onClick={onClick}>
+      <button key={t.key} data-a11y-key={t.key} type="button" className={'a11y-tile' + (TOUCH_HIDE[t.key] ? ' a11y-no-touch' : '')} aria-pressed={t.type === 'action' ? undefined : pressed} aria-label={ariaLabel} onClick={onClick}>
         <span className="a11y-tile-main"><span className="a11y-tile-label">{t.label}</span>{sub}{bars}</span>
         <span className="a11y-tile-ic">{ICONS[TILE_ICON[t.key]]}</span>
       </button>
@@ -751,7 +1003,7 @@ export default function AccessibilityWidget({
       )}
       <button id="a11y-widget-toggle" ref={toggleRef} type="button" style={hidePrompt ? { ...toggleStyle, display: 'none' } : toggleStyle}
         aria-label={open ? 'סגירת תפריט נגישות' : buttonLabel}
-        aria-expanded={open} aria-haspopup="dialog" aria-controls="a11y-panel"
+        aria-expanded={open} aria-haspopup="dialog" aria-controls={open ? 'a11y-panel' : undefined}
         onPointerDown={onDragPointerDown} onPointerMove={onDragPointerMove}
         onPointerUp={onDragPointerUp} onPointerCancel={onDragPointerUp}
         onClick={() => { if (draggedRef.current) { draggedRef.current = false; return; } setOpen((o) => !o); setView('main'); }}>
@@ -763,20 +1015,23 @@ export default function AccessibilityWidget({
           <div className="a11y-head">
             <div className="a11y-head-title"><span className="a11y-badge">{ICONS.person}</span><span>נגישות</span></div>
             <div className="a11y-head-actions">
-              <button type="button" className="a11y-ico-btn" aria-label="ברירת מחדל (איפוס)" title="ברירת מחדל" onClick={() => setView('reset')}>{ICONS.reset}</button>
-              <button type="button" className="a11y-ico-btn" aria-label="הסתרת כפתור הנגישות" title="הסתרה" onClick={() => setView('hide')}>{ICONS.eye}</button>
+              <button type="button" className="a11y-ico-btn" aria-label="ברירת מחדל (איפוס)" title="ברירת מחדל" onClick={(e) => { openerRef.current = e.currentTarget; setView('reset'); }}>{ICONS.reset}</button>
+              <button type="button" className="a11y-ico-btn" aria-label="הסתרת כפתור הנגישות" title="הסתרה" onClick={(e) => { openerRef.current = e.currentTarget; setView('hide'); }}>{ICONS.eye}</button>
               <button type="button" className="a11y-ico-btn" aria-label="סגירה" title="סגירה" onClick={() => { setOpen(false); setView('main'); if (toggleRef.current) toggleRef.current.focus(); }}>{ICONS.close}</button>
             </div>
           </div>
 
           <div className="a11y-body">
+            {statementUrl && (
+              <a className="a11y-statement" href={statementUrl}>{ICONS.doc}<span>{statementLabel || 'הצהרת נגישות'}</span></a>
+            )}
             {view === 'structure' ? (
               <div className="a11y-card">
-                <div className="a11y-menu-title">מבנה העמוד (לפי כותרות SEO)</div>
+                <div className="a11y-menu-title" ref={structTitleRef} tabIndex={-1}>מבנה העמוד (לפי כותרות SEO)</div>
                 {headings.length === 0
                   ? <div className="a11y-struct-empty">לא נמצאו כותרות בעמוד.</div>
                   : headings.map((h) => (
-                    <button key={h.id} type="button" className="a11y-struct-item" onClick={() => gotoHeading(h.id)}>
+                    <button key={h.i} type="button" className="a11y-struct-item" onClick={() => gotoHeading(h.i)}>
                       <span className="a11y-h-tag">H{h.level}</span>
                       <span>{h.text}</span>
                     </button>
@@ -808,21 +1063,21 @@ export default function AccessibilityWidget({
           )}
 
           {view === 'hide' && (
-            <div className="a11y-modal-overlay" role="dialog" aria-label="הסתרת כפתור הנגישות" aria-modal="true">
-              <div className="a11y-modal">
-                <div className="a11y-modal-title">להסתיר את כפתור הנגישות? לכמה זמן?</div>
-                <button type="button" className="a11y-modal-btn" onClick={() => hideFor(8 * 3600)}>ל‑8 שעות</button>
-                <button type="button" className="a11y-modal-btn" onClick={() => hideFor(24 * 3600)}>ל‑24 שעות</button>
+            <div className="a11y-modal-overlay" role="dialog" aria-labelledby="a11y-hide-in-title" aria-describedby="a11y-hide-in-note" aria-modal="true">
+              <div className="a11y-modal" ref={modalRef}>
+                <div className="a11y-modal-title" id="a11y-hide-in-title">להסתיר את כפתור הנגישות? לכמה זמן?</div>
+                <button type="button" className="a11y-modal-btn" onClick={() => hideFor(8 * 3600)}>8 שעות</button>
+                <button type="button" className="a11y-modal-btn" onClick={() => hideFor(24 * 3600)}>24 שעות</button>
                 <button type="button" className="a11y-modal-btn danger" onClick={() => hideFor(10 * 365 * 24 * 3600)}>לצמיתות</button>
                 <button type="button" className="a11y-modal-btn cancel" onClick={() => setView('main')}>ביטול</button>
-                <div className="a11y-modal-note">אפשר תמיד להחזיר עם Alt+Shift+A</div>
+                <div className="a11y-modal-note" id="a11y-hide-in-note">{statementUrl ? 'כדי להחזיר את הכפתור נכנסים לדף הצהרת הנגישות של האתר או לוחצים Alt+Shift+A במקלדת.' : 'כדי להחזיר את הכפתור לוחצים Alt+Shift+A במקלדת או מוחקים את נתוני האתר בדפדפן.'}</div>
               </div>
             </div>
           )}
 
           {view === 'reset' && (
             <div className="a11y-modal-overlay" role="dialog" aria-label="איפוס הגדרות" aria-modal="true">
-              <div className="a11y-modal">
+              <div className="a11y-modal" ref={modalRef}>
                 <div className="a11y-modal-title">לאפס את כל הגדרות הנגישות?</div>
                 <button type="button" className="a11y-modal-btn primary" onClick={doReset}>כן, אפס הכול</button>
                 <button type="button" className="a11y-modal-btn cancel" onClick={() => setView('main')}>ביטול</button>
@@ -833,14 +1088,14 @@ export default function AccessibilityWidget({
       )}
 
       {hidePrompt && (
-        <div className="a11y-modal-overlay a11y-standalone" role="dialog" aria-modal="true" aria-labelledby="a11y-hide-title">
+        <div className="a11y-modal-overlay a11y-standalone" role="dialog" aria-modal="true" aria-labelledby="a11y-hide-title" aria-describedby="a11y-hide-note">
           <div className="a11y-modal" ref={hideModalRef}>
             <div className="a11y-modal-title" id="a11y-hide-title">להסתיר את כפתור הנגישות? לכמה זמן?</div>
-            <button type="button" className="a11y-modal-btn" onClick={() => { hideFor(8 * 3600); setHidePrompt(false); }}>ל‑8 שעות</button>
-            <button type="button" className="a11y-modal-btn" onClick={() => { hideFor(24 * 3600); setHidePrompt(false); }}>ל‑24 שעות</button>
+            <button type="button" className="a11y-modal-btn" onClick={() => { hideFor(8 * 3600); setHidePrompt(false); }}>8 שעות</button>
+            <button type="button" className="a11y-modal-btn" onClick={() => { hideFor(24 * 3600); setHidePrompt(false); }}>24 שעות</button>
             <button type="button" className="a11y-modal-btn danger" onClick={() => { hideFor(10 * 365 * 24 * 3600); setHidePrompt(false); }}>לצמיתות</button>
             <button type="button" className="a11y-modal-btn cancel" onClick={() => setHidePrompt(false)}>ביטול</button>
-            <div className="a11y-modal-note">אפשר תמיד להחזיר עם Alt+Shift+A</div>
+            <div className="a11y-modal-note" id="a11y-hide-note">{statementUrl ? 'כדי להחזיר את הכפתור נכנסים לדף הצהרת הנגישות של האתר או לוחצים Alt+Shift+A במקלדת.' : 'כדי להחזיר את הכפתור לוחצים Alt+Shift+A במקלדת או מוחקים את נתוני האתר בדפדפן.'}</div>
           </div>
         </div>
       )}

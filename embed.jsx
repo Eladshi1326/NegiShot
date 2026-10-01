@@ -10,13 +10,17 @@
  *              data-offset="20" data-z-index="2147483000"
  *              data-hide-branding="false"
  *              data-button-label="פתיחת תפריט נגישות"
- *              data-initial='{"highlightLinks":true}' defer></script>
+ *              data-initial='{"highlightLinks":true}'
+ *              data-statement-url="/accessibility.html" data-statement-label="הצהרת נגישות" defer></script>
  *   2) אובייקט גלובלי לפני הסקריפט:  window.A11yWidgetConfig = { color:"#e11d48", size:64 };
  *   3) תוכניתית בזמן ריצה:           AccessibilityWidget.init({ color:"#0ea5e9" });
+ *
+ * החזרת כפתור שהוסתר: AccessibilityWidget.show() או ?a11y-widget=show בכתובת הדף.
+ * הסתרה: AccessibilityWidget.hide() (עד טעינת הדף הבאה) או hide(שניות) (נשמר בעוגייה).
  */
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import AccessibilityWidget from './AccessibilityWidget.jsx';
+import AccessibilityWidget, { showWidget, hideWidget } from './AccessibilityWidget.jsx';
 
 (function () {
   if (typeof document === 'undefined') return;
@@ -52,6 +56,8 @@ import AccessibilityWidget from './AccessibilityWidget.jsx';
     if (ds.brandLabel) cfg.brandLabel = ds.brandLabel;
     if (ds.hideBranding != null) cfg.hideBranding = String(ds.hideBranding) === 'true';
     if (ds.buttonLabel) cfg.buttonLabel = ds.buttonLabel;
+    if (ds.statementUrl) cfg.statementUrl = ds.statementUrl;       // קישור להצהרת הנגישות
+    if (ds.statementLabel) cfg.statementLabel = ds.statementLabel;
     if (ds.initial) { try { cfg.initialSettings = JSON.parse(ds.initial); } catch (e) { /* */ } }
     // אובייקט גלובלי גובר על data-*
     if (window.A11yWidgetConfig && typeof window.A11yWidgetConfig === 'object') {
@@ -84,7 +90,8 @@ import AccessibilityWidget from './AccessibilityWidget.jsx';
     rootEl = null;
   }
 
-  window.AccessibilityWidget = { init: init, update: update, unmount: unmount, getConfig: function () { return lastCfg; } };
+  // show / hide: החזרה והסתרה של הכפתור מבחוץ (למשל מקישור בדף הצהרת הנגישות)
+  window.AccessibilityWidget = { init: init, update: update, unmount: unmount, getConfig: function () { return lastCfg; }, show: showWidget, hide: hideWidget };
 
   var disabled = thisScript && thisScript.dataset && String(thisScript.dataset.auto) === 'false';
   if (!disabled) {
